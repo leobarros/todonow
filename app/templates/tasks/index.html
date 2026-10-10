@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "_macros.html" import task_row, section_header, bulk_bar, empty_state, progress_bar with context %}
+{% block title %}Tarefas · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+{% set here = url_for('tasks.index', **filters) %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <p class="text-body-secondary mb-1 text-uppercase letter-spaced small">Todas as entradas</p>
+    <h1 class="h3 mb-0"><i class="bi bi-list-task me-2 text-primary"></i>Tarefas</h1>
+    <p class="text-body-secondary mb-0 small">{{ pagination.total }} resultado(s) · {{ stats.open }} aberta(s) · {{ stats.done }} concluída(s)</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.calendar') }}"><i class="bi bi-calendar-week me-1"></i>Calendário</a>
+    <a class="btn btn-primary" href="{{ url_for('tasks.create') }}"><i class="bi bi-plus-lg me-1"></i>Nova tarefa</a>
+  </div>
+</div>
+
+<div class="bujo-card p-3 mb-3">
+  <form method="get" action="{{ url_for('tasks.index') }}" class="row g-2 align-items-end" id="task-filters">
+    <div class="col-12 col-lg-4">
+      <label class="form-label small mb-1" for="f-q">Buscar</label>
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="search" class="form-control" id="f-q" name="q" value="{{ filters.q }}" placeholder="título ou notas">
+      </div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <label class="form-label small mb-1" for="f-when">Período</label>
+      <select class="form-select" id="f-when" name="when">
+        {% for value, label in [('all', 'Tudo'), ('today', 'Hoje'), ('overdue', 'Atrasadas'), ('week', 'Próx. 7 dias'), ('future', 'Futuras')] %}
+          <option value="{{ value }}" {{ 'selected' if filters.when == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-lg-2">
+      <label class="form-label small mb-1" for="f-status">Situação</label>
+      <select class="form-select" id="f-status" name="status">
+        <option value="">Todas</option>
+        {% for value in TASK_STATUSES %}
+          <option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ STATUS_LABELS[value] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-lg-2">
+      <label class="form-label small mb-1" for="f-kind">Tipo</label>
+      <select class="form-select" id="f-kind" name="kind">
+        <option value="">Todos</option>
+        {% for value in TASK_KINDS %}
+          <option value="{{ value }}" {{ 'selected' if filters.kind == value else '' }}>{{ KIND_LABELS[value] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-lg-2">
+      <label class="form-label small mb-1" for="f-collection">Coleção</label>
+      <select class="form-select" id="f-collection" name="collection">
+        <option value="">Todas</option>
+        {% for value in form.collection.choices[1:] %}
+          <option value="{{ value[0] }}" {{ 'selected' if filters.collection == value[0] else '' }}>{{ value[1] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 d-flex flex-wrap gap-3 align-items-center">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="f-done" name="include_done" value="1"
+               {{ 'checked' if filters.include_done else '' }}>
+        <label class="form-check-label small" for="f-done">Incluir concluídas</label>
+      </div>
+      <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+      <a href="{{ url_for('tasks.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle me-1"></i>Limpar</a>
+      <span class="ms-auto small text-body-secondary">Progresso geral</span>
+      <div style="min-width: 160px;">{{ progress_bar(stats.done, stats.total) }}</div>
+    </div>
+  </form>
+</div>
+
+{{ bulk_bar(tasks | rejectattr('is_closed') | map(attribute='id') | list, here, [
+  ('complete', 'Concluir', 'bi-check2-all', 'btn-outline-success'),
+  ('migrate_tomorrow', 'Migrar p/ amanhã', 'bi-arrow-right-circle', 'btn-outline-warning'),
+  ('migrate_week', 'Migrar +7 dias', 'bi-calendar-plus', 'btn-outline-warning'),
+  ('cancel', 'Cancelar', 'bi-slash-circle', 'btn-outline-secondary'),
+  ('reopen', 'Reabrir', 'bi-arrow-counterclockwise', 'btn-outline-info'),
+  ('delete', 'Excluir', 'bi-trash', 'btn-outline-danger')
+]) }}
+
+{% if tasks %}
+  <div class="task-list mt-3">
+    {% for task in tasks %}{{ task_row(task, next_url=here) }}{% endfor %}
+  </div>
+
+  {% if pagination.pages > 1 %}
+    <nav class="mt-4" aria-label="Paginação">
+      <ul class="pagination justify-content-center">
+        <li class="page-item {{ 'disabled' if not pagination.has_prev else '' }}">
+          <a class="page-link" href="{{ url_for('tasks.index', page=pagination.prev_num, **filters) }}">
+            <i class="bi bi-chevron-left"></i>
+          </a>
+        </li>
+        {% for page in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+          {% if page %}
+            <li class="page-item {{ 'active' if page == pagination.page else '' }}">
+              <a class="page-link" href="{{ url_for('tasks.index', page=page, **filters) }}">{{ page }}</a>
+            </li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if not pagination.has_next else '' }}">
+          <a class="page-link" href="{{ url_for('tasks.index', page=pagination.next_num, **filters) }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </li>
+      </ul>
+    </nav>
+  {% endif %}
+{% else %}
+  {{ empty_state('Nenhuma tarefa encontrada com esses filtros.', 'bi-search') }}
+{% endif %}
+{% endblock %}

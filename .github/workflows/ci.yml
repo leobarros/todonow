@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Testes (pytest)
+        run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build da imagem
+        run: docker build -t todonow:ci .
+
+      - name: Subir o container e checar o healthz
+        run: |
+          docker run -d --name todonow-ci -p 8000:8000 \
+            -e SECRET_KEY=ci-secret-key \
+            -e TODONOW_ADMIN_USER=ci -e TODONOW_ADMIN_PASSWORD=ci-senha-123 \
+            todonow:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/healthz; then exit 0; fi
+            sleep 2
+          done
+          echo "healthcheck falhou"; docker logs todonow-ci; exit 1
+
+      - name: Logs
+        if: always()
+        run: docker logs todonow-ci || true

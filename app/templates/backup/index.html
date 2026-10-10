@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Backup e restauração · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <p class="text-body-secondary mb-1 text-uppercase letter-spaced small">Segurança dos dados</p>
+    <h1 class="h3 mb-0"><i class="bi bi-hdd-network me-2 text-primary"></i>Backup e restauração</h1>
+    <p class="text-body-secondary mb-0 small">
+      {{ total_tasks }} tarefa(s) nesta conta · pasta de backups: <code>{{ backup_dir }}</code>
+    </p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}"><i class="bi bi-sun me-1"></i>Voltar para hoje</a>
+</div>
+
+<div class="row g-3">
+  {# ---------------- Exportar ---------------- #}
+  <div class="col-12 col-lg-6">
+    <div class="bujo-card p-4 h-100">
+      <h2 class="h5"><i class="bi bi-download me-2 text-success"></i>Exportar backup</h2>
+      <p class="text-body-secondary small">
+        Gera um arquivo <code>.json</code> com todas as entradas (título, notas, tipo, prioridade, coleção,
+        datas e situação). Restaurar depois é idempotente: cada entrada tem um UUID próprio.
+      </p>
+      <form method="get" action="{{ url_for('backup.export') }}" class="row g-2 align-items-end">
+        <div class="col-12 col-md-7">
+          {{ export_form.scope.label(class="form-label small") }}
+          {{ export_form.scope(class="form-select") }}
+        </div>
+        <div class="col-12 col-md-5 d-grid">
+          <button type="submit" class="btn btn-success"><i class="bi bi-filetype-json me-1"></i>Baixar JSON</button>
+        </div>
+        {% if not current_user.is_admin %}
+          <div class="col-12">
+            <div class="form-text">Backups completos da instância (todos os usuários) são exclusivos de administradores.</div>
+          </div>
+        {% endif %}
+      </form>
+
+      <hr>
+
+      <h3 class="h6"><i class="bi bi-hdd me-2"></i>Salvar no servidor (snapshot)</h3>
+      <p class="text-body-secondary small mb-2">
+        Grava o JSON em <code>{{ backup_dir }}</code> e mantém os {{ keep }} mais recentes.
+      </p>
+      <form method="post" action="{{ url_for('backup.create_snapshot') }}" class="row g-2 align-items-end">
+        {{ snapshot_form.hidden_tag() }}
+        <div class="col-12 col-md-5">
+          {{ snapshot_form.scope.label(class="form-label small") }}
+          {{ snapshot_form.scope(class="form-select", id="snap-scope") }}
+        </div>
+        <div class="col-12 col-md-4">
+          {{ snapshot_form.label.label(class="form-label small") }}
+          {{ snapshot_form.label(class="form-control", id="snap-label") }}
+        </div>
+        <div class="col-12 col-md-3 d-grid">
+          <button type="submit" class="btn btn-outline-success"><i class="bi bi-save me-1"></i>Criar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ---------------- Importar ---------------- #}
+  <div class="col-12 col-lg-6">
+    <div class="bujo-card p-4 h-100">
+      <h2 class="h5"><i class="bi bi-upload me-2 text-primary"></i>Restaurar backup</h2>
+      <form method="post" action="{{ url_for('backup.import_backup') }}" enctype="multipart/form-data" novalidate>
+        {{ import_form.hidden_tag() }}
+
+        <div class="mb-3">
+          {{ import_form.file.label(class="form-label") }}
+          {{ import_form.file(class="form-control" + (" is-invalid" if import_form.file.errors else ""), accept=".json,application/json") }}
+          {% for error in import_form.file.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+
+        <div class="mb-3">
+          {{ import_form.text.label(class="form-label") }}
+          {{ import_form.text(class="form-control font-monospace" + (" is-invalid" if import_form.text.errors else "")) }}
+          {% for error in import_form.text.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+
+        <fieldset class="mb-3">
+          <legend class="form-label fs-6">{{ import_form.mode.label.text }}</legend>
+          {% for option in import_form.mode %}
+            <div class="form-check">
+              {{ option(class="form-check-input") }}
+              {{ option.label(class="form-check-label small") }}
+            </div>
+          {% endfor %}
+        </fieldset>
+
+        <div class="alert alert-warning small d-flex gap-2" role="alert">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <div>
+            <strong>Substituir</strong> apaga as tarefas atuais antes de importar.
+            <strong>Mesclar</strong> preserva o que existe e atualiza pelos UUIDs.
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary"
+                data-confirm="Restaurar este backup? Confira o modo escolhido.">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar backup
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {# ---------------- Snapshots ---------------- #}
+  <div class="col-12">
+    <div class="bujo-card p-0 overflow-hidden">
+      <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary-subtle">
+        <h2 class="h6 mb-0"><i class="bi bi-archive me-2"></i>Snapshots no servidor</h2>
+        <span class="badge rounded-pill text-bg-secondary">{{ snapshots|length }}</span>
+      </div>
+      {% if snapshots %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">Arquivo</th>
+                <th scope="col">Criado em</th>
+                <th scope="col" class="text-end">Tamanho</th>
+                <th scope="col" class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for snapshot in snapshots %}
+                <tr>
+                  <td><code class="small">{{ snapshot.name }}</code></td>
+                  <td class="small text-body-secondary">{{ snapshot.modified.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                  <td class="text-end small">{{ snapshot.size_human }}</td>
+                  <td class="text-end">
+                    <div class="d-inline-flex gap-1">
+                      <a class="btn btn-sm btn-outline-secondary border-0"
+                         href="{{ url_for('backup.download_snapshot', name=snapshot.name) }}" title="Baixar">
+                        <i class="bi bi-download"></i>
+                      </a>
+                      <form method="post" action="{{ url_for('backup.restore_snapshot', name=snapshot.name) }}"
+                            data-confirm="Restaurar o snapshot {{ snapshot.name }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="mode" value="merge">
+                        <button class="btn btn-sm btn-outline-warning border-0" type="submit" title="Restaurar (mesclar)">
+                          <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                      </form>
+                      <form method="post" action="{{ url_for('backup.restore_snapshot', name=snapshot.name) }}"
+                            data-confirm="Restaurar SUBSTITUINDO as tarefas atuais pelo snapshot {{ snapshot.name }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="mode" value="replace">
+                        <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Restaurar (substituir)">
+                          <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                      </form>
+                      <form method="post" action="{{ url_for('backup.delete_snapshot', name=snapshot.name) }}"
+                            data-confirm="Excluir o snapshot {{ snapshot.name }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Excluir">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="p-4 text-center text-body-secondary">
+          <i class="bi bi-archive fs-1 d-block mb-2 opacity-50"></i>
+          Nenhum snapshot ainda. Crie um para ter um ponto de restauração no servidor.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---------------- Dicas ---------------- #}
+  <div class="col-12">
+    <div class="bujo-card p-4">
+      <h2 class="h6"><i class="bi bi-terminal me-2"></i>Backup pela linha de comando (cron)</h2>
+      <p class="text-body-secondary small mb-2">
+        Os mesmos dados podem ser exportados/restaurados por CLI — útil para agendar no homelab:
+      </p>
+      <pre class="bg-body-tertiary border rounded p-3 small mb-2"><code># backup completo da instância
+docker compose exec todonow flask --app wsgi backup --scope full
+
+# backup de um usuário específico
+docker compose exec todonow flask --app wsgi backup --scope user --username meuusuario
+
+# restaurar (mesclar) um arquivo já copiado para o container
+docker compose exec todonow flask --app wsgi restore /data/backups/arquivo.json --mode merge
+
+# conferir snapshots existentes
+docker compose exec todonow flask --app wsgi snapshots</code></pre>
+      <p class="text-body-secondary small mb-0">
+        <i class="bi bi-info-circle me-1"></i>O banco SQLite fica no volume Docker
+        (<code>/data/todonow.db</code>): parar o container e copiar a pasta <code>/data</code> também é um backup válido.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

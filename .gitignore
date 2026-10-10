@@ -1,0 +1,46 @@
+# todonow
+*.py[cod]
+__pycache__/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ambientes virtuais
+.venv/
+venv/
+env/
+
+# configuração local e segredos
+.env
+.env.*
+!.env.example
+instance/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+secret_key
+
+# backups locais
+*.backup.json
+backups/
+
+# ferramentas
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+*.log
+
+# editores / SO
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# estado local do buildx (sandbox)
+.docker-config/

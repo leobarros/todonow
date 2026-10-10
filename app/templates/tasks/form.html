@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if task else 'Nova' }} tarefa · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Hoje</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('tasks.index') }}">Tarefas</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ 'Editar' if task else 'Nova' }}</li>
+      </ol>
+    </nav>
+
+    <div class="bujo-card p-4">
+      <h1 class="h4 mb-3">
+        <i class="bi {{ 'bi-pencil-square' if task else 'bi-plus-circle' }} me-2"></i>
+        {{ 'Editar entrada' if task else 'Nova entrada' }}
+      </h1>
+
+      <form method="post" novalidate>
+        {{ form.hidden_tag() }}
+        <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+
+        <div class="mb-3">
+          {{ form.title.label(class="form-label") }}
+          {{ form.title(class="form-control form-control-lg" + (" is-invalid" if form.title.errors else "")) }}
+          {% for error in form.title.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            {{ form.kind.label(class="form-label") }}
+            {{ form.kind(class="form-select" + (" is-invalid" if form.kind.errors else "")) }}
+            {% for error in form.kind.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+            <div class="form-text">• tarefa · ○ evento · – nota</div>
+          </div>
+          <div class="col-12 col-md-4">
+            {{ form.priority.label(class="form-label") }}
+            {{ form.priority(class="form-select") }}
+            <div class="form-text">Média = <span class="signifier">!</span> · Alta = <span class="signifier">*</span></div>
+          </div>
+          <div class="col-12 col-md-4">
+            {{ form.status.label(class="form-label") }}
+            {{ form.status(class="form-select") }}
+            <div class="form-text">Concluída aparece riscada ✕</div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            {{ form.scheduled_date.label(class="form-label") }}
+            {{ form.scheduled_date(class="form-control" + (" is-invalid" if form.scheduled_date.errors else ""), type="date") }}
+            {% for error in form.scheduled_date.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+            <div class="btn-group btn-group-sm mt-2" role="group" aria-label="Atalhos de data">
+              <button type="button" class="btn btn-outline-secondary js-set-date" data-target="scheduled_date"
+                      data-value="{{ today().isoformat() }}">Hoje</button>
+              <button type="button" class="btn btn-outline-secondary js-set-date" data-target="scheduled_date"
+                      data-value="{{ (today() + timedelta(days=1)).isoformat() }}">Amanhã</button>
+              <button type="button" class="btn btn-outline-secondary js-set-date" data-target="scheduled_date"
+                      data-value="{{ (today() + timedelta(days=7)).isoformat() }}">+7 dias</button>
+              <button type="button" class="btn btn-outline-secondary js-set-date" data-target="scheduled_date"
+                      data-value="{{ (today() + timedelta(days=30)).isoformat() }}">+30 dias</button>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            {{ form.due_date.label(class="form-label") }}
+            {{ form.due_date(class="form-control" + (" is-invalid" if form.due_date.errors else ""), type="date") }}
+            {% for error in form.due_date.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+            <div class="btn-group btn-group-sm mt-2" role="group" aria-label="Atalhos de prazo">
+              <button type="button" class="btn btn-outline-secondary js-set-date" data-target="due_date"
+                      data-value="{{ today().isoformat() }}">Hoje</button>
+              <button type="button" class="btn btn-outline-secondary js-set-date" data-target="due_date"
+                      data-value="{{ (today() + timedelta(days=7)).isoformat() }}">+7 dias</button>
+              <button type="button" class="btn btn-outline-secondary js-clear-date" data-target="due_date">Limpar</button>
+            </div>
+          </div>
+
+          <div class="col-12">
+            {{ form.collection.label(class="form-label") }}
+            {{ form.collection(class="form-control", list="collection-options") }}
+            <datalist id="collection-options">
+              {% for collection in Task.collections(current_user) %}
+                <option value="{{ collection }}"></option>
+              {% endfor %}
+            </datalist>
+            <div class="form-text">Coleções agrupam as entradas do dia (ex.: Trabalho, Infra, Pessoal).</div>
+          </div>
+
+          <div class="col-12">
+            {{ form.notes.label(class="form-label") }}
+            {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else "")) }}
+            {% for error in form.notes.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <hr class="my-4">
+
+        <div class="d-flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2 me-1"></i>{{ 'Salvar alterações' if task else 'Criar entrada' }}
+          </button>
+          <a class="btn btn-outline-secondary" href="{{ request.args.get('next') or url_for('tasks.index') }}">Cancelar</a>
+
+          {% if task %}
+            <div class="ms-auto d-flex gap-2">
+              <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ url_for('tasks.edit', task_id=task.id) }}">
+                <button class="btn btn-outline-success" type="submit">
+                  <i class="bi bi-{{ 'arrow-counterclockwise' if task.is_done else 'check2-all' }} me-1"></i>
+                  {{ 'Reabrir' if task.is_done else 'Concluir' }}
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}"
+                    data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;? Esta ação não pode ser desfeita.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ url_for('tasks.index') }}">
+                <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1"></i>Remover</button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    {% if task %}
+      <p class="text-body-secondary small mt-3 mb-0">
+        Criada em {{ task.created_at.strftime('%d/%m/%Y %H:%M') }}
+        {% if task.updated_at %}· atualizada em {{ task.updated_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+        {% if task.completed_at %}· concluída em {{ task.completed_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+        · UUID <code>{{ task.uuid[:8] }}</code>
+      </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

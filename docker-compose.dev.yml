@@ -1,0 +1,35 @@
+# todonow — ambiente de desenvolvimento
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Monta o código-fonte, ativa o debug/reload do Flask e reduz os limites de
+# recurso para testes rápidos. Não use em produção.
+
+services:
+  todonow:
+    command:
+      - flask
+      - --app
+      - wsgi
+      - run
+      - --debug
+      - --host=0.0.0.0
+      - --port=8000
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      ALLOW_REGISTRATION: "yes"
+      GUNICORN_WORKERS: "1"
+    volumes:
+      - .:/app
+      - todonow-dev-data:/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  todonow-dev-data:
+    name: todonow-dev-data

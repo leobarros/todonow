@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import quick_add_form with context %}
+{% block title %}Calendário · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+{% set here = url_for('main.calendar') %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <p class="text-body-secondary mb-1 text-uppercase letter-spaced small">Visão geral</p>
+    <h1 class="h3 mb-0"><i class="bi bi-calendar-week me-2 text-primary"></i>Calendário</h1>
+    <p class="text-body-secondary mb-0 small">Arraste uma tarefa para reagendar. Clique para abrir os detalhes.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.daily_log') }}"><i class="bi bi-journal-text me-1"></i>Diário de hoje</a>
+    <a class="btn btn-primary" href="{{ url_for('tasks.create') }}"><i class="bi bi-plus-lg me-1"></i>Nova tarefa</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-xl-9">
+    <div class="bujo-card p-3">
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de situação">
+          <button type="button" class="btn btn-outline-primary active" data-cal-filter="status" data-value="">Todas</button>
+          <button type="button" class="btn btn-outline-primary" data-cal-filter="status" data-value="open">Abertas</button>
+          <button type="button" class="btn btn-outline-primary" data-cal-filter="status" data-value="done">Concluídas</button>
+        </div>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de tipo">
+          <button type="button" class="btn btn-outline-secondary active" data-cal-filter="kind" data-value="">Todos os tipos</button>
+          <button type="button" class="btn btn-outline-secondary" data-cal-filter="kind" data-value="task">Tarefas</button>
+          <button type="button" class="btn btn-outline-secondary" data-cal-filter="kind" data-value="event">Eventos</button>
+          <button type="button" class="btn btn-outline-secondary" data-cal-filter="kind" data-value="note">Notas</button>
+        </div>
+        <div class="form-check form-switch ms-auto">
+          <input class="form-check-input" type="checkbox" role="switch" id="cal-show-due" checked>
+          <label class="form-check-label small" for="cal-show-due">Mostrar prazos</label>
+        </div>
+      </div>
+
+      <div id="calendar"
+           data-feed="{{ url_for('main.calendar_feed') }}"
+           data-move="{{ url_for('main.calendar_move') }}"
+           data-week-start="{{ config.WEEK_START }}"></div>
+      <div id="calendar-error" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-3">
+    <div class="bujo-card p-3 mb-3">
+      <h2 class="h6"><i class="bi bi-plus-circle me-2"></i>Agendar rápido</h2>
+      {{ quick_add_form(task_form, url_for('tasks.quick_add'), here, compact=true) }}
+    </div>
+
+    <div class="bujo-card p-3 mb-3">
+      <h2 class="h6"><i class="bi bi-speedometer2 me-2"></i>Resumo</h2>
+      <ul class="list-unstyled mb-0 small">
+        <li class="d-flex justify-content-between py-1"><span>Abertas</span><span class="fw-semibold text-primary">{{ stats.open }}</span></li>
+        <li class="d-flex justify-content-between py-1 border-top border-secondary-subtle"><span>Atrasadas</span><span class="fw-semibold text-danger">{{ stats.overdue }}</span></li>
+        <li class="d-flex justify-content-between py-1 border-top border-secondary-subtle"><span>Concluídas</span><span class="fw-semibold text-success">{{ stats.done }}</span></li>
+        <li class="d-flex justify-content-between py-1 border-top border-secondary-subtle"><span>Futuras</span><span class="fw-semibold text-info">{{ stats.future }}</span></li>
+      </ul>
+    </div>
+
+    <div class="bujo-card p-3">
+      <h2 class="h6"><i class="bi bi-palette me-2"></i>Legenda</h2>
+      <ul class="list-unstyled mb-0 small legend-list">
+        <li><span class="legend-dot bg-primary"></span> Tarefa</li>
+        <li><span class="legend-dot bg-info"></span> Evento</li>
+        <li><span class="legend-dot bg-secondary"></span> Nota</li>
+        <li><span class="legend-dot bg-success"></span> Concluída</li>
+        <li><span class="legend-dot bg-danger"></span> Atrasada / prazo</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/fullcalendar.global.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/fullcalendar-locale-pt-br.global.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
+{% endblock %}

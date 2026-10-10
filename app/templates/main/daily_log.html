@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import task_row, quick_add_form, bulk_bar, section_header, day_nav, empty_state with context %}
+{% block title %}{{ day|date_pt }} · Diário{% endblock %}
+
+{% block content %}
+{% set here = url_for('main.daily_log', day_iso=day.isoformat()) %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <p class="text-body-secondary mb-1 text-uppercase letter-spaced small">Daily log · BUJO</p>
+    <h1 class="h3 mb-0"><span class="bujo-symbol fs-4">•</span> {{ day_label }}</h1>
+  </div>
+  {{ day_nav(url_for('main.daily_log', day_iso=prev_day.isoformat()),
+            url_for('main.daily_log', day_iso=next_day.isoformat()),
+            day|date_pt,
+            url_for('main.daily_log')) }}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-8">
+    {{ quick_add_form(task_form, url_for('tasks.quick_add'), here, compact=true) }}
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="bujo-card p-3 h-100">
+      <div class="small text-body-secondary text-uppercase letter-spaced mb-2">Legenda</div>
+      <div class="d-flex flex-wrap gap-3 small">
+        <span><span class="bujo-symbol">•</span> tarefa</span>
+        <span><span class="bujo-symbol">○</span> evento</span>
+        <span><span class="bujo-symbol">–</span> nota</span>
+        <span><span class="bujo-symbol">✕</span> concluída</span>
+        <span><span class="bujo-symbol">&gt;</span> migrada</span>
+        <span><span class="signifier">*</span> prioridade</span>
+      </div>
+      <hr class="my-2">
+      <div class="small text-body-secondary">
+        {{ entries|length }} entrada(s) neste dia · {{ carried|length }} pendência(s) anterior(es)
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if carried %}
+  {{ section_header('Migrar pendências de dias anteriores', 'bi-arrow-counterclockwise', carried|length, 'danger') }}
+  {{ bulk_bar(carried | map(attribute='id') | list, here, [
+    ('migrate_tomorrow', 'Migrar todas p/ amanhã', 'bi-arrow-right-circle', 'btn-outline-warning'),
+    ('complete', 'Concluir todas', 'bi-check2-all', 'btn-outline-success'),
+    ('delete', 'Excluir todas', 'bi-trash', 'btn-outline-danger')
+  ]) }}
+  <div class="task-list mt-2">
+    {% for task in carried %}{{ task_row(task, next_url=here) }}{% endfor %}
+  </div>
+{% endif %}
+
+{{ section_header('Entradas do dia', 'bi-journal-text', entries|length) }}
+{% if entries %}
+  <div class="bujo-page">
+    {% for collection, items in collections.items() %}
+      <div class="bujo-collection mb-3">
+        <div class="collection-title">
+          <i class="bi bi-tag me-1"></i>{{ collection }}
+          <span class="badge rounded-pill text-bg-secondary ms-1">{{ items|length }}</span>
+        </div>
+        <div class="task-list">
+          {% for task in items %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  {{ empty_state('Nenhuma entrada registrada neste dia.', 'bi-journal', false) }}
+{% endif %}
+
+{% set extra_completed = completed | rejectattr('scheduled_date', 'equalto', day) | list %}
+{% if extra_completed %}
+  {{ section_header('Concluídas neste dia', 'bi-check2-circle', extra_completed|length, 'success') }}
+  <div class="task-list">
+    {% for task in extra_completed %}{{ task_row(task, next_url=here) }}{% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

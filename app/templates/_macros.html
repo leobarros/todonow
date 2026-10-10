@@ -1,0 +1,260 @@
+{# Reusable BUJO components. Import with:
+   {% from "_macros.html" import task_row, stat_card, empty_state, quick_add_form %} #}
+
+{% macro bujo_symbol(task) -%}
+  <span class="bujo-symbol bujo-symbol-{{ task.status }}{% if task.kind != 'task' %} bujo-symbol-{{ task.kind }}{% endif %}"
+        title="{{ KIND_LABELS[task.kind] }} · {{ task.status_label }}">{{ task.bujo_symbol }}</span>
+{%- endmacro %}
+
+{% macro priority_badge(task) -%}
+  {% if task.priority != 'none' %}
+    <span class="badge rounded-pill text-bg-{{ PRIORITY_BADGES[task.priority] }} badge-priority"
+          title="Prioridade {{ PRIORITY_LABELS[task.priority] }}">
+      {{ PRIORITY_SIGNIFIERS[task.priority] }} {{ PRIORITY_LABELS[task.priority] }}
+    </span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro kind_badge(task) -%}
+  <span class="badge rounded-pill text-bg-light border kind-badge">
+    <i class="bi {{ KIND_ICONS[task.kind] }} me-1"></i>{{ KIND_LABELS[task.kind] }}
+  </span>
+{%- endmacro %}
+
+{% macro task_dates(task, show_start=True) -%}
+  <span class="text-nowrap">
+    {% if show_start %}
+      <i class="bi bi-calendar-event me-1"></i>{{ task.scheduled_date|date_pt }}
+    {% endif %}
+    {% if task.due_date %}
+      <span class="ms-2 {{ 'text-danger fw-semibold' if task.is_overdue() and task.is_open else '' }}">
+        <i class="bi bi-flag me-1"></i>prazo {{ task.due_date|date_pt }} ({{ task.due_date|relative }})
+      </span>
+    {% endif %}
+    {% if task.migrated_to_date %}
+      <span class="ms-2 text-warning-emphasis"><i class="bi bi-arrow-right-circle me-1"></i>migrada para {{ task.migrated_to_date|date_pt }}</span>
+    {% endif %}
+  </span>
+{%- endmacro %}
+
+{% macro task_row(task, next_url=None, show_start=True, show_actions=True) %}
+  {% set next_url = next_url or request.full_path %}
+  <article class="task-row bujo-card{% if task.is_strikethrough %} is-done{% endif %}{% if task.is_overdue() and task.is_open %} is-overdue{% endif %}"
+           data-task-id="{{ task.id }}" id="task-{{ task.id }}">
+    <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}" class="task-toggle js-toggle-task">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <button type="submit" class="bujo-check" aria-label="{{ 'Reabrir' if task.is_done else 'Concluir' }} tarefa" title="{{ 'Reabrir' if task.is_done else 'Marcar como concluída' }}">
+        {{ bujo_symbol(task) }}
+      </button>
+    </form>
+
+    <div class="task-body">
+      <h3 class="task-title">
+        {% if task.signifier %}<span class="signifier" title="Prioridade">{{ task.signifier }}</span>{% endif %}
+        <a href="{{ url_for('tasks.detail', task_id=task.id) }}" class="task-link">{{ task.title }}</a>
+      </h3>
+
+      <div class="task-meta">
+        {{ kind_badge(task) }}
+        {{ priority_badge(task) }}
+        {% if task.collection %}
+          <a class="badge rounded-pill text-bg-secondary text-decoration-none badge-collection"
+             href="{{ url_for('tasks.index', collection=task.collection) }}">
+            <i class="bi bi-tag me-1"></i>{{ task.collection }}
+          </a>
+        {% endif %}
+        <span class="ms-1">{{ task_dates(task, show_start) }}</span>
+        {% if task.is_future %}<span class="badge text-bg-info-subtle border ms-1">futura</span>{% endif %}
+        {% if task.is_overdue() and task.is_open %}<span class="badge text-bg-danger ms-1">atrasada</span>{% endif %}
+        {% if task.is_migrated %}<span class="badge text-bg-warning ms-1">migrada</span>{% endif %}
+        {% if task.is_cancelled %}<span class="badge text-bg-secondary ms-1">cancelada</span>{% endif %}
+      </div>
+
+      {% if task.notes %}
+        <div class="task-notes small">{{ task.notes|truncate(280) }}</div>
+      {% endif %}
+    </div>
+
+    {% if show_actions %}
+    <div class="task-actions">
+      <a class="btn btn-sm btn-outline-secondary border-0" href="{{ url_for('tasks.edit', task_id=task.id, next=next_url) }}"
+         title="Editar" aria-label="Editar"><i class="bi bi-pencil"></i></a>
+
+      {% if not task.is_closed %}
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary border-0" type="button" data-bs-toggle="dropdown"
+                aria-expanded="false" title="Migrar (BUJO &gt;)" aria-label="Migrar">
+          <i class="bi bi-arrow-right-circle"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><h6 class="dropdown-header">Migrar para…</h6></li>
+          <li>
+            <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="preset" value="tomorrow">
+              <input type="hidden" name="next" value="{{ next_url }}">
+              <button class="dropdown-item" type="submit"><i class="bi bi-sunrise me-2"></i>Amanhã</button>
+            </form>
+          </li>
+          <li>
+            <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="preset" value="week">
+              <input type="hidden" name="next" value="{{ next_url }}">
+              <button class="dropdown-item" type="submit"><i class="bi bi-calendar-plus me-2"></i>Em 7 dias</button>
+            </form>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}" class="px-3 py-1 migrate-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ next_url }}">
+              <label class="form-label small mb-1" for="migrate-{{ task.id }}">Escolher data</label>
+              <input type="date" class="form-control form-control-sm mb-2" id="migrate-{{ task.id }}" name="target_date"
+                     value="{{ (today() + timedelta(days=1)).isoformat() }}" required>
+              <button class="btn btn-sm btn-primary w-100" type="submit">Migrar</button>
+            </form>
+          </li>
+        </ul>
+      </div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}" data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Remover" aria-label="Remover">
+          <i class="bi bi-trash"></i>
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </article>
+{% endmacro %}
+
+{% macro task_list(tasks, next_url=None, show_start=True, empty_message='Nenhuma entrada por aqui.') %}
+  {% if tasks %}
+    <div class="task-list">
+      {% for task in tasks %}
+        {{ task_row(task, next_url=next_url, show_start=show_start) }}
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state(empty_message, 'bi-journal', false) }}
+  {% endif %}
+{% endmacro %}
+
+{% macro empty_state(message, icon='bi-inbox', card=true) %}
+  <div class="{{ 'bujo-card' if card else '' }} empty-state text-center text-body-secondary py-4">
+    <i class="bi {{ icon }} fs-1 d-block mb-2 opacity-50"></i>
+    <p class="mb-0">{{ message }}</p>
+  </div>
+{% endmacro %}
+
+{% macro stat_card(label, value, icon, tone='primary', hint=None) %}
+  <div class="col-6 col-lg-3">
+    <div class="bujo-card stat-card h-100">
+      <div class="d-flex align-items-start justify-content-between">
+        <div>
+          <div class="stat-label">{{ label }}</div>
+          <div class="stat-value text-{{ tone }}">{{ value }}</div>
+          {% if hint %}<div class="stat-hint">{{ hint }}</div>{% endif %}
+        </div>
+        <i class="bi {{ icon }} fs-3 text-{{ tone }} opacity-50"></i>
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro quick_add_form(form, action_url, next_url, compact=false) %}
+  <form method="post" action="{{ action_url }}" class="quick-add bujo-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-lg-5">
+        <label class="form-label small mb-1" for="qa-title">O que precisa ser feito?</label>
+        <div class="input-group">
+          <span class="input-group-text bg-transparent"><i class="bi bi-plus-lg"></i></span>
+          {{ form.title(class="form-control", id="qa-title", required=True, maxlength="255") }}
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label small mb-1" for="qa-kind">Tipo</label>
+        {{ form.kind(class="form-select", id="qa-kind") }}
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label small mb-1" for="qa-priority">Prioridade</label>
+        {{ form.priority(class="form-select", id="qa-priority") }}
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label small mb-1" for="qa-date">Data</label>
+        {{ form.scheduled_date(class="form-control", id="qa-date", type="date") }}
+      </div>
+      <div class="col-6 col-lg-1 d-grid">
+        <button class="btn btn-primary" type="submit" title="Adicionar"><i class="bi bi-plus-lg"></i></button>
+      </div>
+      {% if not compact %}
+      <div class="col-12">
+        <label class="form-label small mb-1" for="qa-collection">Coleção (opcional)</label>
+        {{ form.collection(class="form-control", id="qa-collection", maxlength="64", placeholder="Ex.: Trabalho, Infra, Pessoal") }}
+      </div>
+      {% endif %}
+    </div>
+    <div class="form-text mt-2">
+      <i class="bi bi-info-circle me-1"></i>Sem data escolhida a tarefa começa <strong>hoje</strong>; escolha uma data futura para agendá-la.
+    </div>
+  </form>
+{% endmacro %}
+
+{% macro progress_bar(done, total, tone='success') %}
+  {% set pct = (done / total * 100) | round(0, 'floor') | int if total else 0 %}
+  <div class="progress bujo-progress" role="progressbar" aria-label="Progresso" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+    <div class="progress-bar bg-{{ tone }}" style="width: {{ pct }}%">{{ pct }}%</div>
+  </div>
+{% endmacro %}
+
+{# Bulk action bar: hidden ids + submit buttons carrying the action value. #}
+{% macro bulk_bar(ids, next_url, actions) %}
+  {% if ids %}
+    <form method="post" action="{{ url_for('tasks.bulk') }}" class="bulk-bar d-flex flex-wrap align-items-center gap-2"
+          data-confirm="Aplicar a ação selecionada?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      {% for task_id in ids %}
+        <input type="hidden" name="ids" value="{{ task_id }}">
+      {% endfor %}
+      <span class="text-body-secondary small me-1"><i class="bi bi-check2-square me-1"></i>{{ ids|length }} entrada(s):</span>
+      {% for value, label, icon, css in actions %}
+        <button type="submit" name="action" value="{{ value }}" class="btn btn-sm {{ css }}">
+          <i class="bi {{ icon }} me-1"></i>{{ label }}
+        </button>
+      {% endfor %}
+    </form>
+  {% endif %}
+{% endmacro %}
+
+{% macro section_header(title, icon, count=None, tone='primary') %}
+  <div class="section-header d-flex align-items-center justify-content-between mt-4 mb-2">
+    <h2 class="h6 mb-0 text-uppercase letter-spaced text-{{ tone }}">
+      <i class="bi {{ icon }} me-2"></i>{{ title }}
+    </h2>
+    {% if count is not none %}
+      <span class="badge rounded-pill text-bg-{{ tone }}">{{ count }}</span>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro day_nav(prev_url, next_url, label, today_url=None) %}
+  <div class="d-flex align-items-center gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ prev_url }}" title="Dia anterior" aria-label="Dia anterior">
+      <i class="bi bi-chevron-left"></i>
+    </a>
+    <span class="fw-semibold text-nowrap">{{ label }}</span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ next_url }}" title="Próximo dia" aria-label="Próximo dia">
+      <i class="bi bi-chevron-right"></i>
+    </a>
+    {% if today_url %}
+      <a class="btn btn-sm btn-outline-primary" href="{{ today_url }}">Hoje</a>
+    {% endif %}
+  </div>
+{% endmacro %}

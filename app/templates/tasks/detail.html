@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_macros.html" import bujo_symbol, priority_badge, kind_badge, task_dates, task_row with context %}
+{% block title %}{{ task.title }} · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+{% set here = url_for('tasks.detail', task_id=task.id) %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-9">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Hoje</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('tasks.index') }}">Tarefas</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Detalhes</li>
+      </ol>
+    </nav>
+
+    <article class="bujo-card p-4{{ ' is-done' if task.is_strikethrough else '' }}">
+      <div class="d-flex align-items-start gap-3">
+        <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}" class="js-toggle-task">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ here }}">
+          <button type="submit" class="bujo-check bujo-check-lg" aria-label="Alternar conclusão">
+            {{ bujo_symbol(task) }}
+          </button>
+        </form>
+
+        <div class="flex-grow-1">
+          <h1 class="h3 mb-2">
+            {% if task.signifier %}<span class="signifier">{{ task.signifier }}</span>{% endif %}
+            {{ task.title }}
+          </h1>
+          <div class="task-meta mb-3">
+            {{ kind_badge(task) }}
+            {{ priority_badge(task) }}
+            <span class="badge rounded-pill {{ 'text-bg-success' if task.is_done else ('text-bg-danger' if task.is_overdue() else 'text-bg-secondary') }}">
+              {{ task.status_label }}
+            </span>
+            {% if task.collection %}
+              <a class="badge rounded-pill text-bg-secondary text-decoration-none"
+                 href="{{ url_for('tasks.index', collection=task.collection) }}"><i class="bi bi-tag me-1"></i>{{ task.collection }}</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <dl class="row mt-3 mb-0 small">
+        <dt class="col-sm-3 text-body-secondary">Começa em</dt>
+        <dd class="col-sm-9">{{ task.scheduled_date|date_long_pt }} <span class="text-body-secondary">({{ task.scheduled_date|relative }})</span></dd>
+
+        <dt class="col-sm-3 text-body-secondary">Prazo</dt>
+        <dd class="col-sm-9">
+          {% if task.due_date %}
+            {{ task.due_date|date_long_pt }} <span class="text-body-secondary">({{ task.due_date|relative }})</span>
+          {% else %}—{% endif %}
+        </dd>
+
+        <dt class="col-sm-3 text-body-secondary">Criada em</dt>
+        <dd class="col-sm-9">{{ task.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+
+        {% if task.completed_at %}
+          <dt class="col-sm-3 text-body-secondary">Concluída em</dt>
+          <dd class="col-sm-9">{{ task.completed_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+        {% endif %}
+
+        {% if task.migrated_to_date %}
+          <dt class="col-sm-3 text-body-secondary">Migrada para</dt>
+          <dd class="col-sm-9">{{ task.migrated_to_date|date_pt }} ({{ task.migrated_to_date|relative }})</dd>
+        {% endif %}
+
+        <dt class="col-sm-3 text-body-secondary">Identificador</dt>
+        <dd class="col-sm-9"><code>{{ task.uuid }}</code></dd>
+      </dl>
+
+      {% if task.notes %}
+        <hr>
+        <h2 class="h6"><i class="bi bi-card-text me-2"></i>Notas</h2>
+        <div class="task-notes">{{ task.notes|nl2br }}</div>
+      {% endif %}
+
+      <hr>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="{{ url_for('tasks.edit', task_id=task.id, next=here) }}">
+          <i class="bi bi-pencil me-1"></i>Editar
+        </a>
+        {% if not task.is_closed %}
+          <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="preset" value="tomorrow">
+            <input type="hidden" name="next" value="{{ here }}">
+            <button class="btn btn-outline-warning" type="submit"><i class="bi bi-arrow-right-circle me-1"></i>Migrar p/ amanhã</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}" class="ms-auto"
+              data-confirm="Remover esta tarefa definitivamente?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ url_for('tasks.index') }}">
+          <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1"></i>Remover</button>
+        </form>
+      </div>
+    </article>
+
+    {% if task.migrated_from %}
+      <h2 class="h6 mt-4"><i class="bi bi-clock-history me-2"></i>Origem</h2>
+      {{ task_row(task.migrated_from, next_url=here, show_actions=false) }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

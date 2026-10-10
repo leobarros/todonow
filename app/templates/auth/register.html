@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Criar conta · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-9 col-lg-6">
+    <div class="bujo-card p-4">
+      <h1 class="h5 mb-1"><i class="bi bi-person-plus me-2"></i>Criar conta</h1>
+      <p class="text-body-secondary small">
+        {% if config.FIRST_USER_IS_ADMIN %}
+          A primeira conta criada é promovida a administradora.
+        {% endif %}
+        Suas tarefas ficam visíveis apenas para você.
+      </p>
+
+      <form method="post" action="{{ url_for('auth.register') }}" novalidate>
+        {{ form.hidden_tag() }}
+        {% with form = form, prefix = '' %}
+          {% include "auth/_register_fields.html" %}
+        {% endwith %}
+
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-check2 me-1"></i>{{ form.submit.label.text }}
+          </button>
+          <a href="{{ url_for('auth.login') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Já tenho conta
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

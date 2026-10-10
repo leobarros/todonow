@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_card, progress_bar with context %}
+{% block title %}Meu perfil · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div class="d-flex align-items-center gap-3">
+    <span class="avatar-badge avatar-lg">{{ current_user.initials }}</span>
+    <div>
+      <h1 class="h4 mb-0">{{ current_user.name }}</h1>
+      <p class="text-body-secondary mb-0 small">
+        <i class="bi bi-person me-1"></i>{{ current_user.username }}
+        {% if current_user.is_admin %}<span class="badge text-bg-primary ms-2">administrador</span>{% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}"><i class="bi bi-sun me-1"></i>Hoje</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('backup.index') }}"><i class="bi bi-hdd-network me-1"></i>Backup</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {{ stat_card('Tarefas abertas', stats.open, 'bi-list-task', 'primary') }}
+  {{ stat_card('Concluídas', stats.done, 'bi-check2-circle', 'success', stats.completion_rate ~ '% do total') }}
+  {{ stat_card('Atrasadas', stats.overdue, 'bi-exclamation-triangle', 'danger') }}
+  {{ stat_card('Futuras', stats.future, 'bi-fast-forward', 'info') }}
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <div class="bujo-card p-4 h-100">
+      <h2 class="h6"><i class="bi bi-person-gear me-2"></i>Dados do perfil</h2>
+      <form method="post" action="{{ url_for('auth.profile') }}" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="mb-3">
+          {{ form.display_name.label(class="form-label") }}
+          {{ form.display_name(class="form-control", id="profile-display-name") }}
+        </div>
+        <div class="mb-3">
+          {{ form.email.label(class="form-label") }}
+          {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), id="profile-email") }}
+          {% for error in form.email.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          {{ form.theme.label(class="form-label") }}
+          {{ form.theme(class="form-select", id="profile-theme") }}
+        </div>
+        <button type="submit" name="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Salvar perfil</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="bujo-card p-4 h-100">
+      <h2 class="h6"><i class="bi bi-shield-lock me-2"></i>Alterar senha</h2>
+      <form method="post" action="{{ url_for('auth.change_password') }}" novalidate>
+        {{ password_form.hidden_tag() }}
+        <div class="mb-3">
+          {{ password_form.current_password.label(class="form-label") }}
+          {{ password_form.current_password(class="form-control" + (" is-invalid" if password_form.current_password.errors else ""), id="pw-current", autocomplete="current-password") }}
+          {% for error in password_form.current_password.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          {{ password_form.password.label(class="form-label") }}
+          {{ password_form.password(class="form-control" + (" is-invalid" if password_form.password.errors else ""), id="pw-new", autocomplete="new-password") }}
+          {% for error in password_form.password.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          {{ password_form.password2.label(class="form-label") }}
+          {{ password_form.password2(class="form-control" + (" is-invalid" if password_form.password2.errors else ""), id="pw-confirm", autocomplete="new-password") }}
+          {% for error in password_form.password2.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <button type="submit" class="btn btn-outline-primary"><i class="bi bi-key me-1"></i>Alterar senha</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="bujo-card p-4 h-100">
+      <h2 class="h6"><i class="bi bi-activity me-2"></i>Atividade recente</h2>
+      {% if stats.recent %}
+        <ul class="list-unstyled mb-0 activity-list">
+          {% for task in stats.recent %}
+            <li class="d-flex justify-content-between align-items-center gap-2 py-1 border-bottom border-secondary-subtle">
+              <span class="text-truncate">
+                <span class="bujo-symbol bujo-symbol-{{ task.status }}">{{ task.bujo_symbol }}</span>
+                <a href="{{ url_for('tasks.detail', task_id=task.id) }}" class="text-decoration-none">{{ task.title }}</a>
+              </span>
+              <span class="text-body-secondary small text-nowrap">{{ task.scheduled_date|date_pt }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-body-secondary mb-0">Nenhuma atividade ainda.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="bujo-card p-4 h-100">
+      <h2 class="h6"><i class="bi bi-collection me-2"></i>Minhas coleções</h2>
+      {% if stats.collections %}
+        <div class="d-flex flex-wrap gap-2">
+          {% for collection in stats.collections %}
+            <a class="badge rounded-pill text-bg-secondary text-decoration-none p-2"
+               href="{{ url_for('tasks.index', collection=collection) }}">
+              <i class="bi bi-tag me-1"></i>{{ collection }}
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-body-secondary mb-0">Crie coleções ao adicionar tarefas (ex.: Trabalho, Infra, Pessoal).</p>
+      {% endif %}
+      <hr>
+      <p class="small text-body-secondary mb-2">Progresso geral</p>
+      {{ progress_bar(stats.done, stats.total) }}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Entrar · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+{% set show_register_tab = active_tab == 'register' %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-9 col-lg-6 col-xl-5">
+    <div class="text-center mb-4">
+      <i class="bi bi-journal-check display-4 text-primary"></i>
+      <h1 class="h3 mt-2 mb-0">{{ APP_NAME }}</h1>
+      <p class="text-body-secondary">Tarefas com método BUJO no seu homelab.</p>
+    </div>
+
+    <div class="bujo-card p-4">
+      <ul class="nav nav-pills nav-fill auth-tabs mb-4" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link {{ 'active' if not show_register_tab else '' }}" id="tab-login"
+                  data-bs-toggle="pill" data-bs-target="#pane-login" type="button" role="tab"
+                  aria-controls="pane-login" aria-selected="{{ 'false' if show_register_tab else 'true' }}">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Entrar
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          {% if allow_registration %}
+            <button class="nav-link {{ 'active' if show_register_tab else '' }}" id="tab-register"
+                    data-bs-toggle="pill" data-bs-target="#pane-register" type="button" role="tab"
+                    aria-controls="pane-register" aria-selected="{{ 'true' if show_register_tab else 'false' }}">
+              <i class="bi bi-person-plus me-1"></i>Criar conta
+            </button>
+          {% else %}
+            <button class="nav-link disabled" type="button" role="tab" aria-disabled="true"
+                    title="Cadastro desativado neste servidor">
+              <i class="bi bi-person-plus me-1"></i>Criar conta
+            </button>
+          {% endif %}
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        {# ----------------------------- Entrar ----------------------------- #}
+        <div class="tab-pane fade {{ 'show active' if not show_register_tab else '' }}" id="pane-login"
+             role="tabpanel" aria-labelledby="tab-login" tabindex="0">
+          <form method="post" action="{{ url_for('auth.login') }}" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-3">
+              {{ form.username.label(class="form-label", for="login-username") }}
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""),
+                                 id="login-username", autocomplete="username") }}
+                {% for error in form.username.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              {{ form.password.label(class="form-label", for="login-password") }}
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-key"></i></span>
+                {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                                 id="login-password", autocomplete="current-password") }}
+                <button class="btn btn-outline-secondary js-reveal-password" type="button" tabindex="-1"
+                        title="Mostrar/ocultar senha" aria-label="Mostrar ou ocultar senha"><i class="bi bi-eye"></i></button>
+                {% for error in form.password.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+              </div>
+            </div>
+
+            <div class="form-check mb-3">
+              {{ form.remember(class="form-check-input", id="login-remember") }}
+              {{ form.remember.label(class="form-check-label", for="login-remember") }}
+            </div>
+
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-box-arrow-in-right me-2"></i>{{ form.submit.label.text }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {# --------------------------- Criar conta -------------------------- #}
+        <div class="tab-pane fade {{ 'show active' if show_register_tab else '' }}" id="pane-register"
+             role="tabpanel" aria-labelledby="tab-register" tabindex="0">
+          {% if allow_registration %}
+            <p class="text-body-secondary small">
+              Cada conta tem o seu próprio diário e as suas próprias tarefas.
+              {% if config.FIRST_USER_IS_ADMIN %}A primeira conta criada vira administradora.{% endif %}
+            </p>
+            <form method="post" action="{{ url_for('auth.register') }}" novalidate>
+              {{ register_form.hidden_tag() }}
+              <input type="hidden" name="origin" value="login">
+              {% with form = register_form, prefix = 'reg-' %}
+                {% include "auth/_register_fields.html" %}
+              {% endwith %}
+
+              <div class="d-grid mt-4">
+                <button type="submit" class="btn btn-success btn-lg">
+                  <i class="bi bi-person-plus me-2"></i>Criar conta
+                </button>
+              </div>
+            </form>
+          {% else %}
+            <div class="alert alert-warning d-flex gap-2 mb-0" role="alert">
+              <i class="bi bi-lock-fill"></i>
+              <div>
+                <strong>O cadastro está desativado neste servidor.</strong>
+                <div class="small mt-1">
+                  Peça ao administrador para criar a sua conta em <em>Usuários</em> — ele informa
+                  o usuário e a senha inicial, e você troca a senha depois em <em>Meu perfil</em>.
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-body-secondary small mt-3">
+      <i class="bi bi-shield-lock me-1"></i>Autenticação local — os dados ficam no seu servidor.
+    </p>
+  </div>
+</div>
+{% endblock %}

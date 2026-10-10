@@ -1,0 +1,290 @@
+/* ==========================================================================
+   todonow — BUJO flavoured theme on top of Bootstrap 5.3
+   ========================================================================== */
+
+:root {
+  --bujo-paper: #fbfaf6;
+  --bujo-dot: rgba(33, 37, 41, 0.14);
+  --bujo-line: rgba(33, 37, 41, 0.10);
+  --bujo-rule: rgba(13, 110, 253, 0.22);
+  --bujo-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px -12px rgba(16, 24, 40, 0.18);
+  --bujo-radius: 14px;
+}
+
+[data-bs-theme="dark"] {
+  --bujo-paper: #16181d;
+  --bujo-dot: rgba(255, 255, 255, 0.07);
+  --bujo-line: rgba(255, 255, 255, 0.10);
+  --bujo-rule: rgba(110, 168, 254, 0.28);
+  --bujo-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+}
+
+body.bujo-body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bujo-paper);
+  background-image: radial-gradient(var(--bujo-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.letter-spaced { letter-spacing: .08em; }
+
+/* ---------- cards ---------- */
+.bujo-card {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bujo-radius);
+  box-shadow: var(--bujo-shadow);
+}
+
+.bujo-card.p-0 { padding: 0 !important; }
+
+.bujo-navbar {
+  background: color-mix(in srgb, var(--bs-body-bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.avatar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bs-primary);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.avatar-badge.avatar-lg { width: 56px; height: 56px; font-size: 1.2rem; }
+
+/* ---------- BUJO symbols ---------- */
+.bujo-symbol {
+  display: inline-block;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--bs-primary);
+}
+
+.bujo-symbol-done { color: var(--bs-success); }
+.bujo-symbol-migrated { color: var(--bs-warning); }
+.bujo-symbol-cancelled { color: var(--bs-secondary); }
+.bujo-symbol-event { color: var(--bs-info); }
+.bujo-symbol-note { color: var(--bs-secondary); }
+
+.signifier {
+  color: var(--bs-danger);
+  font-weight: 800;
+  margin-right: .25rem;
+}
+
+.bujo-legend { white-space: nowrap; }
+.bujo-legend .bujo-symbol { margin-right: .15rem; }
+
+/* ---------- task rows ---------- */
+.task-list { display: flex; flex-direction: column; gap: .5rem; }
+
+.task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .7rem .9rem;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-left: 3px solid var(--bs-primary);
+  border-radius: var(--bujo-radius);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.task-row:hover {
+  transform: translateX(2px);
+  box-shadow: var(--bujo-shadow);
+}
+
+.task-row.is-overdue { border-left-color: var(--bs-danger); }
+.task-row.is-done { border-left-color: var(--bs-success); opacity: .82; }
+
+.bujo-check {
+  background: none;
+  border: 0;
+  padding: 0 .15rem;
+  font-size: 1.15rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.bujo-check-lg { font-size: 1.8rem; }
+
+.task-body { flex: 1 1 auto; min-width: 0; }
+
+.task-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 .2rem;
+  line-height: 1.35;
+}
+
+.task-link { color: inherit; text-decoration: none; }
+.task-link:hover { color: var(--bs-primary); text-decoration: underline; }
+
+.task-row.is-done .task-title,
+.is-done .task-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--bs-success);
+  color: var(--bs-secondary-color);
+}
+
+hr + .task-notes { margin-top: .5rem; }
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem;
+  font-size: .78rem;
+  color: var(--bs-secondary-color);
+}
+
+.task-notes {
+  margin-top: .35rem;
+  white-space: pre-line;
+  color: var(--bs-secondary-color);
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: .15rem;
+  flex-shrink: 0;
+}
+
+.kind-badge { color: var(--bs-body-color); }
+.badge-collection { background-color: var(--bs-secondary-bg) !important; color: var(--bs-body-color) !important; }
+.badge-priority { font-weight: 600; }
+
+.bulk-bar {
+  background: var(--bs-tertiary-bg);
+  border: 1px dashed var(--bs-border-color);
+  border-radius: var(--bujo-radius);
+  padding: .6rem .8rem;
+  margin-top: 1rem;
+}
+
+/* ---------- dashboard bits ---------- */
+.stat-card { padding: 1rem 1.1rem; }
+.stat-label { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--bs-secondary-color); }
+.stat-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+.stat-hint { font-size: .72rem; color: var(--bs-secondary-color); }
+
+.bujo-progress { height: 1.1rem; border-radius: 999px; }
+.bujo-progress .progress-bar { font-size: .7rem; font-weight: 600; }
+
+.upcoming-date { width: 3rem; }
+.upcoming-group .bujo-symbol { font-size: 1rem; }
+
+.section-header { border-bottom: 1px solid var(--bujo-line); padding-bottom: .35rem; }
+
+.empty-state { border: 1px dashed var(--bs-border-color); border-radius: var(--bujo-radius); }
+
+/* ---------- daily log ---------- */
+.bujo-page {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bujo-radius);
+  padding: 1rem;
+  position: relative;
+}
+
+.bujo-page::before {
+  content: "";
+  position: absolute;
+  left: 2.2rem;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--bujo-rule);
+}
+
+.collection-title {
+  font-size: .8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--bs-primary);
+  margin-bottom: .4rem;
+}
+
+.task-list-compact .task-row { padding: .35rem .55rem; border-left-width: 2px; }
+.task-list-compact .task-title { font-size: .9rem; margin-bottom: 0; }
+.task-list-compact .task-notes { display: none; }
+
+/* ---------- monthly table ---------- */
+.monthly-table td { vertical-align: middle; }
+.monthly-table .table-active-day { background: var(--bs-primary-bg-subtle); }
+
+/* ---------- legend (calendar) ---------- */
+.legend-list li { display: flex; align-items: center; gap: .5rem; padding: .12rem 0; }
+.legend-dot { width: .75rem; height: .75rem; border-radius: 50%; display: inline-block; }
+
+/* ---------- FullCalendar tweaks ---------- */
+#calendar { min-height: 620px; }
+
+.fc .bujo-event { border: 0; font-weight: 600; }
+.fc .bujo-task { background-color: var(--bs-primary); }
+.fc .bujo-event.bujo-event { background-color: var(--bs-info); }
+.fc .bujo-note { background-color: var(--bs-secondary); }
+.fc .bujo-status-done { background-color: var(--bs-success) !important; opacity: .7; text-decoration: line-through; }
+.fc .bujo-status-migrated { background-color: var(--bs-warning) !important; }
+.fc .bujo-status-cancelled { background-color: var(--bs-secondary) !important; opacity: .6; text-decoration: line-through; }
+.fc .bujo-overdue { background-color: var(--bs-danger) !important; }
+.fc .bujo-due { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.25) 0 6px, transparent 6px 12px); }
+.fc .bujo-priority-high { box-shadow: inset 0 0 0 2px rgba(255,255,255,.65); }
+
+.fc-theme-standard td, .fc-theme-standard th { border-color: var(--bs-border-color); }
+.fc .fc-daygrid-day.fc-day-today { background: var(--bs-primary-bg-subtle); }
+.fc .fc-toolbar-title { font-size: 1.1rem; }
+
+/* ---------- flash stack ---------- */
+.flash-stack { position: relative; z-index: 5; }
+.flash-stack .alert { border: 1px solid var(--bs-border-color); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 576px) {
+  .task-row { flex-wrap: wrap; }
+  .task-actions { width: 100%; justify-content: flex-end; }
+  .stat-value { font-size: 1.5rem; }
+  .bujo-page::before { display: none; }
+}
+
+@media print {
+  .bujo-navbar, .task-actions, .bulk-bar, footer, .quick-add { display: none !important; }
+  body.bujo-body { background: #fff; }
+}
+
+/* ---------- login: abas Entrar / Criar conta ---------- */
+.auth-tabs {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  padding: .25rem;
+  gap: .25rem;
+}
+
+.auth-tabs .nav-link {
+  border-radius: 999px;
+  color: var(--bs-body-color);
+  font-weight: 600;
+  font-size: .92rem;
+  padding: .5rem .75rem;
+}
+
+.auth-tabs .nav-link:hover:not(.disabled) { background: var(--bs-secondary-bg); }
+.auth-tabs .nav-link.active { background: var(--bs-primary); color: #fff; }
+.auth-tabs .nav-link.disabled { opacity: .45; }

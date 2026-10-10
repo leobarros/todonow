@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_macros.html" import task_row, section_header, bulk_bar, empty_state, progress_bar with context %}
+{% block title %}{{ month_label }} · Mensal{% endblock %}
+
+{% block content %}
+{% set here = url_for('main.monthly_log', year=year, month=month) %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <p class="text-body-secondary mb-1 text-uppercase letter-spaced small">Monthly log · BUJO</p>
+    <h1 class="h3 mb-0"><i class="bi bi-calendar3 me-2 text-primary"></i>{{ month_label }}</h1>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.monthly_log', year=prev_year, month=prev_month) }}">
+      <i class="bi bi-chevron-left"></i> Anterior
+    </a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.monthly_log') }}">Mês atual</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.monthly_log', year=next_year, month=next_month) }}">
+      Próximo <i class="bi bi-chevron-right"></i>
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-8">
+    <div class="bujo-card p-3">
+      <div class="d-flex justify-content-between small text-body-secondary mb-2">
+        <span>{{ stats.total }} entrada(s) no mês</span>
+        <span>{{ stats.done }} concluída(s) · {{ stats.open }} aberta(s)</span>
+      </div>
+      {{ progress_bar(stats.done, stats.total) }}
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="bujo-card p-3 h-100 d-flex flex-wrap gap-2 align-items-center">
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.calendar') }}"><i class="bi bi-calendar-week me-1"></i>Calendário</a>
+      <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.future_log') }}"><i class="bi bi-fast-forward me-1"></i>Future Log</a>
+      <a class="btn btn-sm btn-outline-success" href="{{ url_for('tasks.create', date=first.isoformat()) }}"><i class="bi bi-plus-lg me-1"></i>Nova no mês</a>
+    </div>
+  </div>
+</div>
+
+{{ bulk_bar(tasks | selectattr('status', 'equalto', 'open') | map(attribute='id') | list, here, [
+  ('complete', 'Concluir abertas do mês', 'bi-check2-all', 'btn-outline-success'),
+  ('migrate_week', 'Migrar abertas +7 dias', 'bi-arrow-right-circle', 'btn-outline-warning')
+]) }}
+
+<div class="bujo-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 monthly-table">
+      <thead>
+        <tr>
+          <th scope="col" class="text-center" style="width: 6rem;">Dia</th>
+          <th scope="col">Entradas</th>
+          <th scope="col" class="text-center" style="width: 7rem;">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in days %}
+          {% set items = by_day.get(day, []) %}
+          <tr class="{{ 'table-active-day' if day == current_day else '' }}{{ ' text-body-secondary' if not items else '' }}">
+            <td class="text-center">
+              <div class="fw-bold {{ 'text-primary' if day == current_day else '' }}">{{ day.strftime('%d') }}</div>
+              <div class="small text-uppercase">{{ WEEKDAYS_SHORT_PT[day.weekday()] }}</div>
+            </td>
+            <td>
+              {% if items %}
+                <div class="task-list task-list-compact">
+                  {% for task in items %}{{ task_row(task, next_url=here, show_start=false, show_actions=false) }}{% endfor %}
+                </div>
+              {% else %}
+                <span class="text-body-secondary small">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <div class="d-flex flex-column gap-1">
+                <a class="btn btn-sm btn-outline-secondary border-0" href="{{ url_for('main.daily_log', day_iso=day.isoformat()) }}"
+                   title="Abrir o dia"><i class="bi bi-journal-text"></i></a>
+                <a class="btn btn-sm btn-outline-primary border-0" href="{{ url_for('tasks.create', date=day.isoformat()) }}"
+                   title="Nova entrada neste dia"><i class="bi bi-plus-lg"></i></a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

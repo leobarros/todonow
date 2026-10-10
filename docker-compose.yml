@@ -1,0 +1,70 @@
+# todonow — docker-compose for the homelab
+#
+#   cp .env.example .env   # ajuste SECRET_KEY e a senha do admin
+#   docker compose up -d --build
+#   docker compose logs -f
+#
+# Consumo de memória: o app inteiro (gunicorn + SQLite) roda bem abaixo de
+# 512 MB; o limite explícito abaixo garante que nunca chegue perto dos 4 GB.
+
+services:
+  todonow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: todonow:1.0.0
+    container_name: todonow
+    restart: unless-stopped
+
+    env_file:
+      # Copie .env.example para .env antes de subir (opcional, há defaults).
+      - path: .env
+        required: false
+    environment:
+      # Caminho do banco/backups dentro do volume — não altere sem trocar o volume.
+      DATA_DIR: /data
+      BACKUP_DIR: /data/backups
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+      APP_LOCALE: ${APP_LOCALE:-pt_BR}
+      WEEK_START: ${WEEK_START:-6}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-auto}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      TASKS_PER_PAGE: ${TASKS_PER_PAGE:-50}
+      BACKUP_KEEP: ${BACKUP_KEEP:-20}
+
+    ports:
+      - "${TODONOW_PORT:-8000}:8000"
+
+    volumes:
+      - todonow-data:/data
+      # Descomente para guardar os snapshots fora do volume (ex.: pasta do NAS):
+      # - /srv/todonow/backups:/data/backups
+
+    # ---- limites de recurso (bem abaixo dos 4 GB exigidos) ----
+    mem_limit: ${TODONOW_MEM_LIMIT:-512m}
+    memswap_limit: ${TODONOW_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${TODONOW_CPUS:-1.0}
+    pids_limit: 256
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  todonow-data:
+    name: todonow-data

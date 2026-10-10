@@ -1,0 +1,49 @@
+{# Campos do formulário de cadastro, reaproveitados pela tela de login (abas)
+   e pela página /auth/register.
+
+   Espera no contexto:
+     form   -> RegistrationForm
+     prefix -> prefixo dos atributos id (evita IDs duplicados quando as duas
+               abas aparecem na mesma página). Ex.: 'reg-'
+#}
+{% set prefix = prefix|default('', true) %}
+<div class="row g-3">
+  <div class="col-12 col-md-6">
+    <label class="form-label" for="{{ prefix }}username">{{ form.username.label.text }}</label>
+    {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""),
+                     id=prefix ~ "username", autocomplete="username") }}
+    {% for error in form.username.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+  </div>
+
+  <div class="col-12 col-md-6">
+    <label class="form-label" for="{{ prefix }}display-name">{{ form.display_name.label.text }}</label>
+    {{ form.display_name(class="form-control", id=prefix ~ "display-name",
+                         placeholder="Como quer ser chamado?") }}
+  </div>
+
+  <div class="col-12">
+    <label class="form-label" for="{{ prefix }}email">{{ form.email.label.text }}</label>
+    {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
+                  id=prefix ~ "email", autocomplete="email") }}
+    {% for error in form.email.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+  </div>
+
+  <div class="col-12 col-md-6">
+    <label class="form-label" for="{{ prefix }}password">{{ form.password.label.text }}</label>
+    <div class="input-group">
+      {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                       id=prefix ~ "password", autocomplete="new-password") }}
+      <button class="btn btn-outline-secondary js-reveal-password" type="button" tabindex="-1"
+              aria-label="Mostrar ou ocultar senha"><i class="bi bi-eye"></i></button>
+      {% for error in form.password.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+    </div>
+    <div class="form-text">Mínimo de {{ config.MIN_PASSWORD_LENGTH }} caracteres.</div>
+  </div>
+
+  <div class="col-12 col-md-6">
+    <label class="form-label" for="{{ prefix }}password2">{{ form.password2.label.text }}</label>
+    {{ form.password2(class="form-control" + (" is-invalid" if form.password2.errors else ""),
+                      id=prefix ~ "password2", autocomplete="new-password") }}
+    {% for error in form.password2.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+  </div>
+</div>

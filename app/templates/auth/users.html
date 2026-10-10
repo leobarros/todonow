@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Usuários · {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-0"><i class="bi bi-people me-2"></i>Usuários</h1>
+    <p class="text-body-secondary mb-0 small">Cada conta tem seu próprio diário e suas próprias tarefas.</p>
+  </div>
+  <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#newUser" aria-expanded="false">
+    <i class="bi bi-person-plus me-1"></i>Novo usuário
+  </button>
+</div>
+
+<div class="collapse mb-4" id="newUser">
+  <div class="bujo-card p-4">
+    <h2 class="h6 mb-3">Criar usuário</h2>
+    <form method="post" action="{{ url_for('auth.create_user') }}" novalidate>
+      {{ form.hidden_tag() }}
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          {{ form.username.label(class="form-label") }}
+          {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""), id="nu-username") }}
+          {% for error in form.username.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-12 col-md-4">
+          {{ form.display_name.label(class="form-label") }}
+          {{ form.display_name(class="form-control", id="nu-display") }}
+        </div>
+        <div class="col-12 col-md-4">
+          {{ form.email.label(class="form-label") }}
+          {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), id="nu-email") }}
+          {% for error in form.email.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-12 col-md-4">
+          {{ form.password.label(class="form-label") }}
+          {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""), id="nu-password", autocomplete="new-password") }}
+          {% for error in form.password.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <div class="form-check">
+            {{ form.is_admin(class="form-check-input", id="nu-admin") }}
+            {{ form.is_admin.label(class="form-check-label") }}
+          </div>
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check2 me-1"></i>Criar usuário</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bujo-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th scope="col">Usuário</th>
+          <th scope="col">Perfil</th>
+          <th scope="col" class="text-center">Tarefas</th>
+          <th scope="col">Último login</th>
+          <th scope="col" class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+          <tr class="{{ '' if user.is_active else 'opacity-50' }}">
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <span class="avatar-badge">{{ user.initials }}</span>
+                <div>
+                  <div class="fw-semibold">{{ user.name }}</div>
+                  <div class="small text-body-secondary">{{ user.username }}{% if user.email %} · {{ user.email }}{% endif %}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              {% if user.is_admin %}<span class="badge text-bg-primary">admin</span>{% else %}<span class="badge text-bg-secondary">usuário</span>{% endif %}
+              {% if not user.is_active %}<span class="badge text-bg-warning">inativo</span>{% endif %}
+              {% if user.id == current_user.id %}<span class="badge text-bg-info">você</span>{% endif %}
+            </td>
+            <td class="text-center">{{ counts.get(user.id, 0) }}</td>
+            <td class="small text-body-secondary">{{ user.last_login_at.strftime('%d/%m/%Y %H:%M') if user.last_login_at else '—' }}</td>
+            <td class="text-end">
+              <div class="d-inline-flex gap-1">
+                <a class="btn btn-sm btn-outline-secondary border-0" href="{{ url_for('auth.reset_password', user_id=user.id) }}"
+                   title="Redefinir senha"><i class="bi bi-key"></i></a>
+
+                <form method="post" action="{{ url_for('auth.toggle_admin', user_id=user.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-sm btn-outline-secondary border-0" type="submit"
+                          title="{{ 'Remover admin' if user.is_admin else 'Tornar admin' }}">
+                    <i class="bi bi-shield-{{ 'x' if user.is_admin else 'check' }}"></i>
+                  </button>
+                </form>
+
+                <form method="post" action="{{ url_for('auth.toggle_active', user_id=user.id) }}"
+                      data-confirm="{{ 'Desativar' if user.is_active else 'Ativar' }} a conta de {{ user.username }}?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-sm btn-outline-secondary border-0" type="submit"
+                          title="{{ 'Desativar' if user.is_active else 'Ativar' }}">
+                    <i class="bi bi-{{ 'pause' if user.is_active else 'play' }}"></i>
+                  </button>
+                </form>
+
+                <form method="post" action="{{ url_for('auth.delete_user', user_id=user.id) }}"
+                      data-confirm="Excluir {{ user.username }} e TODAS as tarefas dele?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Excluir"><i class="bi bi-trash"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
