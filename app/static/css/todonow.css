@@ -521,3 +521,31 @@ hr + .task-notes { margin-top: .5rem; }
 .md-toolbar { row-gap: .25rem; }
 .md-editor .md-toolbar .btn { border-radius: 8px; padding: .3rem .55rem; }
 .md-toolbar .bujo-symbol { font-size: .95rem; }
+
+/* ---------- telas de toque (celular) ---------- */
+@media (max-width: 767.98px) {
+  /* iOS aplica zoom ao focar campos com fonte menor que 16px. */
+  .form-control,
+  .form-select,
+  textarea,
+  .input-group-text { font-size: 1rem; }
+
+  /* Botões compactos ganham área de toque confortável... */
+  .btn-sm { min-height: 2.4rem; }
+  /* ...menos em contextos densos, onde o tamanho pequeno é intencional. */
+  .table .btn-sm { min-height: 0; }
+  .md-toolbar .btn { min-height: 2.3rem; padding-inline: .6rem; }
+
+  /* Ações da linha da tarefa: alvo de ~44px, o mínimo recomendado. */
+  .task-actions { gap: .3rem; }
+  .task-actions .btn,
+  .task-actions .dropdown-toggle {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  /* Cabeçalho de seção: a dica não precisa competir com o contador. */
+  .section-hint { white-space: normal; }
+
+  .upcoming-date { width: 2.4rem; }
+}

@@ -357,3 +357,23 @@ def test_monthly_log_action_buttons_are_aligned(auth_client):
     # os três atalhos continuam lá
     for rotulo in ("Calendário", "Future Log", "Nova no mês"):
         assert rotulo in body
+
+
+def test_selos_usam_classes_validas_do_bootstrap(auth_client, app, user):
+    """`text-bg-<cor>-subtle` não existe no Bootstrap 5.3: o selo saía branco
+    sobre fundo transparente (invisível). O par correto é bg + text-emphasis."""
+    from datetime import date, timedelta
+
+    from app.extensions import db
+    from app.models import Task
+
+    futura = Task(user_id=user.id, title="Futura", scheduled_date=date.today() + timedelta(days=3))
+    migrada = Task(user_id=user.id, title="Rolada", scheduled_date=date.today(), migration_count=2)
+    db.session.add_all([futura, migrada])
+    db.session.commit()
+
+    body = auth_client.get("/tasks/").data.decode("utf-8")
+    assert "text-bg-info-subtle" not in body
+    assert "text-bg-warning-subtle" not in body
+    assert "bg-info-subtle text-info-emphasis" in body
+    assert "bg-warning-subtle text-warning-emphasis" in body

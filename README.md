@@ -45,6 +45,9 @@ calendário, diário no estilo **BUJO (bullet journal)**, backup e restauração
 | Estilo BUJO | Daily Log, Monthly Log e Future Log, símbolos *rapid logging*, prioridades `!`/`*` e **adiamento/migração** (a entrada rola para o novo dia sem criar cópia, sem virar "concluída" e sem gerar gêmea no destino) |
 | Anotações por tarefa | **Dois modos de escrita**: *Visual* (WYSIWYG, para quem não escreve Markdown) e *Markdown* (sintaxe pura). Guardado como Markdown, renderizado no estilo BUJO — item concluído **riscado**, não checkbox. Editável no formulário e direto na tela de detalhe; a lista mostra um selo e um resumo renderizado |
 | Backup e restauração | Exportar/importar JSON (baixar, colar ou enviar arquivo), snapshots no servidor com rotação e restauração nos modos *mesclar*/*substituir*, além de comandos de CLI |
+| Começa limpo para quem baixar | A imagem não leva banco, usuário nem tarefa: o primeiro boot cria um banco vazio e o cadastro fica aberto para você criar a sua conta |
+| Celular e desktop | Layout responsivo (testado de 360px a 1440px, sem rolagem horizontal), alvos de toque de ~44px, sem zoom involuntário no iOS, e **instalável na tela inicial** (manifest + ícone) |
+| Acesso remoto | Pronto para **Tailscale**/proxy reverso: `TRUST_PROXY` respeita `X-Forwarded-Proto`, `TODONOW_BIND` publica só na interface do tailnet e `TRUSTED_HOSTS` limita os hosts aceitos |
 | Rodar com menos de 4 GB | 2 workers gthread, SQLite em WAL; limite padrão de **512 MB** no compose (na prática, ~90 MB ociosos) |
 
 Extras: tema claro/escuro, prazos (*deadline* separado do início),
@@ -70,8 +73,10 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ### 2. Suba o container
 
+A imagem já está publicada no Docker Hub — não precisa construir nada:
+
 ```bash
-docker compose up -d --build
+docker compose up -d     # confere a latest no Docker Hub, baixa se mudou e sobe
 docker compose logs -f
 ```
 
@@ -80,11 +85,69 @@ Acesse **http://localhost:8000** (ou `http://IP-DO-HOMELAB:8000`).
 Com o Makefile fica ainda mais curto:
 
 ```bash
-make up      # build + subir
+make up      # confere a latest e sobe
 make logs    # acompanhar
 make ps      # status e consumo de memória
 make down    # parar
 ```
+
+### Qual imagem está sendo usada
+
+Por padrão o compose usa **`nickolback/todonow:latest`** com
+`pull_policy: always`: **todo `docker compose up -d` confere se saiu versão nova**
+e recria o container quando a imagem mudou — você atualiza só rodando `make up`.
+
+```dotenv
+# Padrão: acompanha a latest
+TODONOW_IMAGE=nickolback/todonow:latest
+TODONOW_PULL_POLICY=always
+
+# Para fixar uma versão (reproduzível):
+# TODONOW_IMAGE=nickolback/todonow:1.1.0
+
+# Para nunca consultar o registry no `up` (atualiza só quando você pedir):
+# TODONOW_PULL_POLICY=missing
+```
+
+> Como a tag `latest` se move, esse `up` precisa de rede. Se o seu homelab fica
+> offline às vezes, troque o padrão para `TODONOW_PULL_POLICY=missing`: aí o app
+> sobe com a imagem que já está no host, e a atualização acontece quando você
+> rodar `docker compose pull && docker compose up -d`.
+
+Para saber **qual versão está rodando**: o rodapé do app e o `/healthz` mostram
+a versão (`v1.1.0`), e `docker compose images` mostra o id da imagem.
+
+> **Arquitetura:** a imagem publicada é **amd64**. Se o seu homelab for ARM
+> (Raspberry Pi, por exemplo), construa a sua com
+> `make build` (ou publique um manifesto multi-arquitetura, veja abaixo).
+
+### Construindo da fonte
+
+```bash
+make build       # constrói a imagem local com a tag do TODONOW_IMAGE
+make up-build    # constrói e sobe (ignora a imagem publicada)
+
+# equivalente sem Makefile:
+docker compose -f docker-compose.yml -f docker-compose.build.yml build
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+O `docker-compose.yml` tem só a imagem de produção; o `build:` fica no
+`docker-compose.build.yml`, para o `up` do dia a dia nunca construir por engano.
+
+### Publicando uma nova versão no Docker Hub
+
+```bash
+make push                        # constrói e publica a latest
+make release VERSION=1.1.0       # publica a latest + uma tag fixa de versão
+
+# multi-arquitetura (amd64 + arm64) direto com buildx:
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t nickolback/todonow:latest -t nickolback/todonow:1.1.0 --push .
+```
+
+> A tag `latest` é a que o compose do homelab segue: depois de `make push`, o
+> próximo `make up` (ou `docker compose up -d`) já pega a versão nova.
 
 ### 3. Onde ficam os dados
 
@@ -138,6 +201,33 @@ docker compose exec todonow flask --app wsgi list-users
 docker compose exec todonow flask --app wsgi set-password maria
 ```
 
+### Sua instância começa limpa
+
+A imagem e o repositório **não levam dados**: nenhum usuário, nenhuma tarefa,
+nenhum banco e nenhum segredo. Ao subir num host novo, o app cria o banco vazio
+no volume e a tela de login oferece *Criar conta* — a primeira conta criada vira
+administradora (e você pode desligar o autocadastro depois com
+`ALLOW_REGISTRATION=no`).
+
+O volume guarda apenas o que o próprio app gera em execução:
+
+```
+/data/todonow.db      banco criado no primeiro boot (vazio: 0 usuários, 0 tarefas)
+/data/secret_key      chave de sessão gerada na hora
+/data/backups/        snapshots, quando você criar algum
+```
+
+Para **zerar tudo** e voltar ao estado de fábrica (apaga usuários e tarefas):
+
+```bash
+docker compose down -v     # remove o container E o volume de dados
+docker compose up -d       # sobe de novo, banco vazio
+```
+
+> Se você só quer limpar as tarefas de um usuário, entre como admin e use
+> *Excluir concluídas/canceladas*, ou o comando
+> `flask --app wsgi dedupe-tasks` para duplicatas.
+
 ### Quem pode se cadastrar?
 
 A variável `ALLOW_REGISTRATION` controla a aba *Criar conta*:
@@ -156,6 +246,64 @@ ela aparece desabilitada explicando que o administrador deve criar a conta.
 
 
 ---
+
+## Acesso remoto com Tailscale
+
+O app roda em HTTP na porta publicada; quem cuida do transporte é o Tailscale.
+Há dois jeitos, e a escolha muda **uma** configuração:
+
+### Opção A — IP do tailnet (HTTP, mais simples)
+
+Acesse direto `http://100.x.y.z:8000` (ou `http://nome-da-maquina:8000`) de
+qualquer dispositivo da tailnet. Nada a configurar além do Tailscale instalado.
+
+Para não expor a porta na LAN, publique só na interface do tailnet no `.env`:
+
+```dotenv
+TODONOW_BIND=100.x.y.z     # o IP do host no tailnet
+TODONOW_PORT=8000
+```
+
+### Opção B — Tailscale Serve (HTTPS com nome e certificado)
+
+```bash
+tailscale serve --bg 8000        # publica https://nome.tailnet.ts.net -> localhost:8000
+```
+
+Aí o TLS termina no Tailscale, então diga isso ao app no `.env`:
+
+```dotenv
+TRUST_PROXY=true                         # respeita X-Forwarded-Proto/Host
+SESSION_COOKIE_SECURE=true               # cookie só trafega em HTTPS
+TRUSTED_HOSTS=nome.tailnet.ts.net        # opcional: recusa outros Host
+TODONOW_BIND=127.0.0.1                   # a porta só precisa ser local
+```
+
+Reinicie com `docker compose up -d` depois de mudar o `.env`.
+
+> `TRUSTED_HOSTS` é uma trava extra: sem ela o app responde a qualquer `Host`
+> header. Com ela, um Host desconhecido recebe 400 em vez de servir a aplicação.
+
+## No celular e no desktop
+
+A interface é a mesma para os dois — Bootstrap 5 com ajustes próprios para
+telas pequenas:
+
+- **Sem rolagem horizontal** de 360px (Android pequeno) a 1440px (desktop) —
+  as tabelas largas (Mensal) rolam dentro do próprio card.
+- **Alvos de toque de ~44px** nas ações da linha (concluir, editar, adiar,
+  remover) e no menu; a barra de filtros e o editor se reorganizam em blocos.
+- **Sem zoom involuntário no iOS**: no celular os campos usam 16px.
+- O menu vira *hambúrguer*, e o calendário quebra a barra de ferramentas em
+  linhas em vez de espremer os botões.
+
+### Instalar como app na tela inicial
+
+Há um manifest e um ícone, então dá para abrir em tela cheia, sem barra de
+navegador:
+
+- **Android/Chrome:** menu ⋮ → *Adicionar à tela inicial* / *Instalar app*.
+- **iPhone/Safari:** botão *Compartilhar* → *Adicionar à Tela de Início*.
 
 ## As telas do app
 
@@ -322,8 +470,14 @@ Formato do arquivo:
 | `ALLOW_REGISTRATION` | `auto` | Controla a aba *Criar conta* na tela de login: `yes` (sempre aberta), `auto` (só sem usuários) ou `no` |
 | `FIRST_USER_IS_ADMIN` | `true` | Primeira conta criada vira admin |
 | `MIN_PASSWORD_LENGTH` | `8` | Tamanho mínimo de senha |
+| `TODONOW_IMAGE` | `nickolback/todonow:latest` | Imagem usada pelo compose |
+| `TODONOW_PULL_POLICY` | `always` | `always` confere a `latest` a cada `up`; `missing` usa a imagem local |
 | `TODONOW_PORT` | `8000` | Porta publicada no host |
-| `SESSION_COOKIE_SECURE` | `false` | Ligue se servir por HTTPS |
+| `TODONOW_BIND` | `0.0.0.0` | Interface onde publicar (`127.0.0.1`, IP do tailnet, …) |
+| `TRUST_PROXY` | `false` | Confia em `X-Forwarded-Proto/Host` (Tailscale Serve, Caddy, Nginx) |
+| `TRUST_PROXY_HOPS` | `1` | Quantos proxies confiar |
+| `TRUSTED_HOSTS` | vazio | Hosts aceitos (separados por vírgula); vazio = qualquer um |
+| `SESSION_COOKIE_SECURE` | `false` | Ligue se servir por HTTPS (obrigatório com Tailscale Serve) |
 | `APP_TIMEZONE` | `America/Sao_Paulo` | Fuso usado em "hoje" e nos horários |
 | `WEEK_START` | `6` | `0`=segunda … `6`=domingo |
 | `DEFAULT_THEME` | `light` | Tema inicial |

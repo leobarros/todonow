@@ -90,6 +90,15 @@ class Config:
     # Allow restoring a full instance backup (users + password hashes).
     ALLOW_FULL_RESTORE = _bool("ALLOW_FULL_RESTORE", True)
 
+    # --- Acesso remoto / proxy ------------------------------------------
+    # true quando o app fica atrás de um proxy que termina o TLS (Tailscale
+    # Serve, Caddy, Nginx). Faz o Flask confiar em X-Forwarded-Proto/Host.
+    TRUST_PROXY = _bool("TRUST_PROXY", False)
+    TRUST_PROXY_HOPS = _int("TRUST_PROXY_HOPS", 1)
+    # Hosts aceitos (protege contra Host header forjado). Vazio = aceita todos.
+    _trusted = os.environ.get("TRUSTED_HOSTS", "").strip()
+    TRUSTED_HOSTS = [h.strip() for h in _trusted.split(",") if h.strip()] or None
+
     # --- UI -------------------------------------------------------------
     TASKS_PER_PAGE = _int("TASKS_PER_PAGE", 50)
     DEFAULT_THEME = os.environ.get("DEFAULT_THEME", "light")

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import mimetypes
 import os
 import secrets
 from pathlib import Path
 
-from flask import Flask, flash, jsonify, redirect, render_template, request
+from flask import Flask, current_app, flash, jsonify, redirect, render_template, request
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from werkzeug.exceptions import HTTPException
@@ -21,7 +22,10 @@ from .config import get_config
 from .extensions import csrf, db, login_manager, migrate
 from .filters import register_context, register_filters
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
+
+# O manifest da PWA precisa do tipo certo para o navegador aceitar instalar.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +118,19 @@ def create_app(config_name: str | None = None, **overrides) -> Flask:
     _load_secret_key(app)
     _ensure_sqlite_dir(app)
     Path(app.config["BACKUP_DIR"]).mkdir(parents=True, exist_ok=True)
+
+    # --- atrás de proxy (Tailscale Serve, Caddy, Nginx) -----------------
+    # Sem isso, o Flask acha que a requisição é HTTP e monta URLs/cookies
+    # errados quando o acesso vem por HTTPS terminado no proxy.
+    if app.config.get("TRUST_PROXY"):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=app.config.get("TRUST_PROXY_HOPS", 1),
+            x_proto=app.config.get("TRUST_PROXY_HOPS", 1),
+            x_host=app.config.get("TRUST_PROXY_HOPS", 1),
+        )
 
     # --- extensions ----------------------------------------------------
     db.init_app(app)
@@ -217,10 +234,25 @@ def _register_error_handlers(app: Flask) -> None:
 def _render_error(status: int, title: str, error):
     if _wants_json():
         return jsonify({"error": title, "status": status}), status
-    return (
-        render_template("errors/error.html", status=status, title=title, detail=getattr(error, "description", "")),
-        status,
-    )
+
+    try:
+        corpo = render_template(
+            "errors/error.html", status=status, title=title, detail=getattr(error, "description", "")
+        )
+    except Exception:
+        # Acontece quando o Host não é confiável (TRUSTED_HOSTS): o Flask fica sem
+        # url_adapter, então nem as URLs dos assets podem ser montadas. Uma página
+        # mínima é melhor que um 500 em cima do 400.
+        current_app.logger.warning(
+            "Não foi possível renderizar a página de erro %s (Host não confiável?)", status
+        )
+        corpo = (
+            "<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\">"
+            f"<title>{status} · {title}</title>"
+            f"<h1>{status} — {title}</h1>"
+            "<p>Este endereço não está configurado como host confiável do todonow.</p>"
+        )
+    return corpo, status
 
 
 def _register_security_headers(app: Flask) -> None:

@@ -234,10 +234,10 @@
         {{ note_badge(task) }}
         {{ priority_badge(task) }}
         <span class="ms-1">{{ task_dates(task, show_start) }}</span>
-        {% if task.is_future %}<span class="badge text-bg-info-subtle border ms-1">futura</span>{% endif %}
+        {% if task.is_future %}<span class="badge bg-info-subtle text-info-emphasis border ms-1">futura</span>{% endif %}
         {% if task.is_overdue() and task.is_open %}<span class="badge text-bg-danger ms-1">atrasada</span>{% endif %}
         {% if task.was_migrated %}
-          <span class="badge text-bg-warning-subtle border ms-1"
+          <span class="badge bg-warning-subtle text-warning-emphasis border ms-1"
                 title="Esta entrada já rolou de dia {{ task.migration_count }}x — não é conclusão">
             <i class="bi bi-arrow-right-circle me-1"></i>migrada{% if task.migration_count > 1 %} {{ task.migration_count }}x{% endif %}
           </span>

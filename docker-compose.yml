@@ -1,18 +1,27 @@
-# todonow — docker-compose for the homelab
+# todonow — docker-compose para o homelab
 #
-#   cp .env.example .env   # ajuste SECRET_KEY e a senha do admin
-#   docker compose up -d --build
+# Usa a imagem publicada no Docker Hub (nickolback/todonow):
+#
+#   cp .env.example .env        # ajuste SECRET_KEY e a senha do admin
+#   docker compose up -d        # baixa a latest e sobe (já confere a versão)
 #   docker compose logs -f
+#
+# Para construir a partir do código-fonte (em vez de baixar):
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 #
 # Consumo de memória: o app inteiro (gunicorn + SQLite) roda bem abaixo de
 # 512 MB; o limite explícito abaixo garante que nunca chegue perto dos 4 GB.
 
 services:
   todonow:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: todonow:1.0.0
+    # Imagem do Docker Hub, sempre na tag `latest`: cada `docker compose up`
+    # confere se saiu versão nova e recria o container se mudou.
+    # Para fixar uma versão (reproduzível), troque no .env:
+    #   TODONOW_IMAGE=nickolback/todonow:1.1.0
+    # Para não consultar o registry a cada up:
+    #   TODONOW_PULL_POLICY=missing
+    image: ${TODONOW_IMAGE:-nickolback/todonow:latest}
+    pull_policy: ${TODONOW_PULL_POLICY:-always}
     container_name: todonow
     restart: unless-stopped
 
@@ -35,7 +44,9 @@ services:
       BACKUP_KEEP: ${BACKUP_KEEP:-20}
 
     ports:
-      - "${TODONOW_PORT:-8000}:8000"
+      # TODONOW_BIND permite expor só numa interface — ex.: o IP do Tailscale
+      # (TODONOW_BIND=100.64.0.1) ou só localhost (127.0.0.1). Padrão: todas.
+      - "${TODONOW_BIND:-0.0.0.0}:${TODONOW_PORT:-8000}:8000"
 
     volumes:
       - todonow-data:/data

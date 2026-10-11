@@ -1,0 +1,20 @@
+{
+  "name": "todonow — tarefas com BUJO",
+  "short_name": "todonow",
+  "description": "Gerenciador de tarefas local, com diário BUJO, calendário e anotações.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#fbfaf6",
+  "theme_color": "#0d6efd",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/static/img/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

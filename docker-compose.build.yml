@@ -1,0 +1,20 @@
+# todonow — construir a imagem a partir do código-fonte
+#
+#   # build local com a mesma tag publicada
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#
+#   # subir já construindo
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+#   # publicar no Docker Hub (nickolback/todonow:latest)
+#   make push                        # constrói e publica a latest
+#   make release VERSION=1.1.0       # publica latest + uma tag fixa de versão
+#
+# O `image:` continua vindo do docker-compose.yml (TODONOW_IMAGE), então o que
+# for construído aqui fica com a tag que o compose usa em produção.
+
+services:
+  todonow:
+    build:
+      context: .
+      dockerfile: Dockerfile
