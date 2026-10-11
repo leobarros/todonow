@@ -5,7 +5,7 @@ Flask + Bootstrap 5 + SQLite, com login local por usuário e senha, visão de
 calendário, diário no estilo **BUJO (bullet journal)**, backup e restauração em JSON.
 
 ```
-• tarefa   ○ evento   – nota   ✕ concluída   > migrada   * prioridade
+• tarefa   ○ evento   – nota   ✕ concluída   * prioridade
 ```
 
 ---
@@ -36,18 +36,19 @@ calendário, diário no estilo **BUJO (bullet journal)**, backup e restauração
 | Bootstrap | Bootstrap 5.3 **vendorizado** em `app/static/vendor` (funciona sem internet) |
 | Ícones | Bootstrap Icons 1.11 vendorizado (fonte `woff2` local) |
 | Docker e docker-compose | `Dockerfile` (python:3.13-slim, usuário não-root) + `docker-compose.yml` com healthcheck e limites |
-| Adicionar tarefas e riscar ao concluir | Formulário rápido no topo + toggle com `text-decoration: line-through` (opcional via AJAX, sem recarregar) |
-| Editar e remover | Tela de edição completa, remoção com confirmação e ações em lote (concluir, migrar, cancelar, reabrir, excluir) |
+| Adicionar tarefas e riscar ao concluir | Formulário rápido no topo + **alvo circular** à esquerda da linha (com anel, realce no hover, anel de foco e dica na seção) que risca com `line-through`; contadores, barra e seções Hoje/Concluídas se atualizam na hora, **sem F5** |
+| Editar e remover | Cada tarefa é única: editar, migrar ou remover fica na própria linha. Ações destrutivas pedem confirmação em **modal Bootstrap** (claro/escuro), com o texto do que será apagado |
 | Cada usuário tem seu perfil e suas tarefas | `user_id` em toda tarefa; toda consulta é filtrada pelo usuário logado (404 para tarefas de terceiros) |
 | Calendário | FullCalendar 6 (vendorizado, locale pt-BR): mês, semana e lista; **arraste para reagendar** |
 | A tarefa começa no dia atual | `scheduled_date` tem `default=today` no modelo e é pré-preenchida com hoje |
 | Criar tarefas para o futuro | Campo "Começa em" com atalhos (+1, +7, +30 dias) e o **Future Log** agrupado por mês |
-| Estilo BUJO | Daily Log, Monthly Log, Future Log, símbolos *rapid logging*, prioridades `!`/`*`, coleções e **migração** (`>` cria a tarefa no novo dia e marca a original) |
+| Estilo BUJO | Daily Log, Monthly Log e Future Log, símbolos *rapid logging*, prioridades `!`/`*` e **adiamento/migração** (a entrada rola para o novo dia sem criar cópia, sem virar "concluída" e sem gerar gêmea no destino) |
+| Anotações por tarefa | **Dois modos de escrita**: *Visual* (WYSIWYG, para quem não escreve Markdown) e *Markdown* (sintaxe pura). Guardado como Markdown, renderizado no estilo BUJO — item concluído **riscado**, não checkbox. Editável no formulário e direto na tela de detalhe; a lista mostra um selo e um resumo renderizado |
 | Backup e restauração | Exportar/importar JSON (baixar, colar ou enviar arquivo), snapshots no servidor com rotação e restauração nos modos *mesclar*/*substituir*, além de comandos de CLI |
 | Rodar com menos de 4 GB | 2 workers gthread, SQLite em WAL; limite padrão de **512 MB** no compose (na prática, ~90 MB ociosos) |
 
-Extras: tema claro/escuro, coleções, prazos (*deadline* separado do início),
-busca e filtros, ações em lote, estatísticas, administração de usuários,
+Extras: tema claro/escuro, prazos (*deadline* separado do início),
+busca e filtros, estatísticas, administração de usuários,
 `/healthz` para monitoramento e suporte a migrações Alembic.
 
 ---
@@ -161,22 +162,78 @@ ela aparece desabilitada explicando que o administrador deve criar a conta.
 | Rota | O que faz |
 |---|---|
 | `/` | **Hoje**: formulário rápido de adição, tarefas do dia, pendências de dias anteriores, concluídas de hoje e prévia dos próximos 7 dias |
-| `/day/<data>` | **Daily Log (BUJO)**: entradas do dia agrupadas por coleção, legenda dos símbolos e migração das pendências |
+| `/day/<data>` | **Daily Log (BUJO)**: entradas do dia, legenda dos símbolos e migração das pendências |
 | `/monthly` | **Monthly Log**: o mês em formato de tabela, com atalhos para cada dia |
 | `/future` | **Future Log**: tudo o que está agendado, agrupado por mês |
 | `/calendar` | **Calendário** (mês/semana/lista), filtros por situação e tipo, arrastar para reagendar |
-| `/tasks/` | Lista completa com busca, filtros, paginação e ações em lote |
+| `/tasks/` | Lista completa com busca, filtros e paginação |
 | `/tasks/new`, `/tasks/<id>/edit`, `/tasks/<id>` | Criar, editar e ver detalhes |
 | `/backup/` | Backup, restauração e snapshots |
 | `/auth/profile` | Perfil: nome, e-mail, tema, troca de senha e estatísticas |
 | `/auth/users` | Admin: criar, ativar/desativar, promover e excluir usuários |
 | `/healthz` | Health check em JSON (usado pelo Docker) |
 
+### Como a migração funciona
+
+Adiar (= migrar) é **rolar a entrada para outro dia**: a mesma tarefa muda de
+data e o número de rolagens fica registrado (`migration_count`). Nada é copiado e
+nada é marcado como concluído — quem foi para amanhã continua pendente, agora em
+"Próximos 7 dias" e no diário do dia novo.
+
+Os atalhos do botão **Adiar** são **relativos à data da própria tarefa**
+(+1 dia / +7 dias / escolher data, sempre no futuro), então não existe
+"adiar para o dia em que ela já está". E, para não criar duplicidade, adiar para
+um dia que **já tem uma tarefa aberta com o mesmo nome** é recusado com um aviso —
+nada é alterado.
+
+> Versões antigas criavam uma **cópia** a cada migração e marcavam a original
+> como `migrated`, o que gerava duplicidade e fazia a tarefa aparecer como
+> concluída. A migração de banco converte esses registros e o comando
+> `flask dedupe-tasks` remove as cópias que sobraram (rode com backup antes).
+
+### Anotações das atividades
+
+Cada tarefa tem um diário curto do que aconteceu, com **duas formas de escrever**:
+
+- **Visual** (padrão) — WYSIWYG: você formata com os botões e vê o resultado na
+  hora, sem saber Markdown. É o modo para quem não quer lidar com sintaxe.
+- **Markdown** — o texto puro, para quem prefere digitar `**negrito**` e listas.
+  Trocar de modo converte o conteúdo nos dois sentidos.
+
+O que fica salvo é sempre **Markdown**; o editor converte o HTML do modo visual
+com o Turndown (vendorizado, funciona offline) e o servidor renderiza de volta
+com o mesmo pipeline da leitura.
+
+Os itens de atividade seguem o **estilo BUJO** — símbolo + riscado, sem checkbox
+de formulário:
+
+```markdown
+## Diário da migração
+
+- [ ] copiar 2 TB             ->  •  copiar 2 TB
+- [x] comprar HD de 4 TB      ->  ✕  comprar HD de 4 TB  (riscado)
+- [-] comprar fita LTO        ->  ~  comprar fita LTO    (riscado e apagado)
+- [>] rolou para amanhã       ->  >
+- [<] agendar em novembro     ->  <
+- [o] janela de manutenção    ->  ○
+```
+
+A barra tem um botão para cada marcador; no modo Visual ele já insere o item
+pronto (basta digitar o texto).
+
+- O HTML é sanitizado (allowlist) antes de aparecer: nada que você cole de fora
+  consegue injetar script.
+- Onde editar: **formulário da tarefa** (criar/editar) e **tela de detalhe**
+  (cartão *Anotações*, com o texto renderizado e o botão *Editar*/*Escrever*).
+- A lista de tarefas mostra um selo *anotações* e o resumo já renderizado
+  (com os símbolos e o riscado), não o Markdown cru.
+- As anotações entram no backup/restauração como texto Markdown.
+
 ### Fluxo BUJO do dia a dia
 
 1. **Manhã** — abra *Hoje*, registre as tarefas no campo rápido (elas nascem com a data de hoje).
 2. **Durante o dia** — clique no símbolo `•` para concluir: a entrada fica riscada `✕`.
-3. **Não terminou?** — use o botão `>` e *Migrar*: a tarefa vai para amanhã (ou +7 dias / uma data escolhida) e a entrada original fica marcada como `>`.
+3. **Não terminou?** — use o botão ↻ e *Migrar*: a **mesma** tarefa passa para amanhã (ou +7 dias / uma data escolhida). Migrar não é concluir e não cria cópia — o contador de rolagens fica no histórico da entrada.
 4. **Planejou algo distante?** — agende com data futura: vai para o *Future Log* e aparece no calendário.
 5. **Mês novo** — abra o *Monthly Log* e migre o que estiver no *Future Log*.
 
@@ -213,6 +270,13 @@ docker compose exec todonow flask --app wsgi restore /data/backups/pre-upgrade.j
 # listar snapshots
 docker compose exec todonow flask --app wsgi snapshots
 
+# remover tarefas duplicadas (mesmo título, data e situação)
+docker compose exec todonow flask --app wsgi dedupe-tasks          # só mostra o plano
+docker compose exec todonow flask --app wsgi dedupe-tasks --apply  # remove de fato
+# ...e também os artefatos que ficaram em dias diferentes (par ligado pela
+# migração antiga, ou uma entrada concluída atrás de outra aberta com o mesmo nome)
+docker compose exec todonow flask --app wsgi dedupe-tasks --across-days --apply
+
 # backup do volume para o host (opção mais crua)
 make backup
 ```
@@ -239,7 +303,7 @@ Formato do arquivo:
   "tasks": [
     {
       "uuid": "9f1c…", "title": "Revisar backup", "kind": "task",
-      "status": "open", "priority": "high", "collection": "Infra",
+      "status": "open", "priority": "high",
       "scheduled_date": "2025-10-10", "due_date": "2025-10-12",
       "notes": null, "completed_at": null, "position": 1
     }
@@ -322,7 +386,7 @@ make test
 ```
 
 A suíte cobre autenticação e isolamento entre usuários, CRUD e conclusão de
-tarefas, migração BUJO, logs diário/mensal/futuro, feed e reagendamento do
+tarefas, migração BUJO (sem duplicar), logs diário/mensal/futuro, feed e reagendamento do
 calendário, backup/restauração (mesclar, substituir, snapshots, tentativa de
 path traversal) e comandos de CLI.
 
@@ -342,7 +406,7 @@ todonow/
 │   ├── security.py          # admin_required, política de cadastro, redirect seguro
 │   ├── cli.py               # init-db, create-user, backup, restore, snapshots, seed-demo…
 │   ├── auth/                # login, registro, perfil, administração de usuários
-│   ├── tasks/               # CRUD, concluir, migrar, ações em lote, reschedule
+│   ├── tasks/               # CRUD, concluir, migrar (mover de dia), reagendar
 │   ├── main/                # dashboard, daily/monthly/future log, calendário e feed JSON
 │   ├── backup/              # exportar, importar, snapshots (service.py + rotas)
 │   ├── templates/           # Jinja (base, macros BUJO, telas por blueprint)
@@ -364,8 +428,10 @@ todonow/
 
 **tasks** — `id`, `uuid` (usado no backup), `user_id`, `title`, `notes`,
 `kind` (`task`/`event`/`note`), `status` (`open`/`done`/`migrated`/`cancelled`),
-`priority`, `collection`, `scheduled_date` (início, padrão hoje), `due_date`
-(prazo opcional), `completed_at`, `migrated_to_date`, `migrated_from_id`, `position`.
+`priority`, `scheduled_date` (início, padrão hoje), `due_date` (prazo opcional),
+`completed_at`, `migrated_to_date`, `migrated_from_id`, `position`.
+A coluna `collection` continua no banco (e no backup) por compatibilidade com
+instâncias antigas, mas não aparece mais na interface.
 
 ---
 
@@ -414,6 +480,22 @@ docker compose exec todonow python -c "
 import sqlite3;c=sqlite3.connect('/data/todonow.db')
 print(c.execute('select count(*) from tasks').fetchone())"
 ```
+
+**Apareceram tarefas repetidas no mesmo dia**
+Sintoma das versões antigas, que copiavam a tarefa a cada migração. Faça um
+backup e limpe:
+```bash
+docker compose exec todonow flask --app wsgi backup --scope full
+docker compose exec todonow flask --app wsgi dedupe-tasks          # revise o plano
+docker compose exec todonow flask --app wsgi dedupe-tasks --apply
+# pares que sobraram em dias diferentes (artefatos da cópia antiga):
+docker compose exec todonow flask --app wsgi dedupe-tasks --across-days --apply
+```
+Sem `--across-days` o comando mantém a tarefa mais antiga de cada grupo (mesmo
+usuário, título, data e situação) e soma o histórico de migração no registro que
+fica. Com `--across-days` ele também remove, **apenas quando há ligação de
+migração ou uma entrada concluída atrás de outra aberta**, o registro antigo —
+tarefas repetidas legítimas (um hábito diário, por exemplo) são preservadas.
 
 **Erro de "E-mail inválido" com endereço da rede local**
 Não acontece: domínios internos como `eu@casa.local`, `admin@homelab.local` ou

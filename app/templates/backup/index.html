@@ -19,7 +19,7 @@
     <div class="bujo-card p-4 h-100">
       <h2 class="h5"><i class="bi bi-download me-2 text-success"></i>Exportar backup</h2>
       <p class="text-body-secondary small">
-        Gera um arquivo <code>.json</code> com todas as entradas (título, notas, tipo, prioridade, coleção,
+        Gera um arquivo <code>.json</code> com todas as entradas (título, notas, tipo, prioridade,
         datas e situação). Restaurar depois é idempotente: cada entrada tem um UUID próprio.
       </p>
       <form method="get" action="{{ url_for('backup.export') }}" class="row g-2 align-items-end">
@@ -98,7 +98,9 @@
         </div>
 
         <button type="submit" class="btn btn-primary"
-                data-confirm="Restaurar este backup? Confira o modo escolhido.">
+                data-confirm="Restaurar este backup?"
+                data-confirm-label="Sim, restaurar"
+                data-confirm-note="Confira o modo escolhido: substituir apaga as tarefas atuais.">
           <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar backup
         </button>
       </form>
@@ -136,7 +138,9 @@
                         <i class="bi bi-download"></i>
                       </a>
                       <form method="post" action="{{ url_for('backup.restore_snapshot', name=snapshot.name) }}"
-                            data-confirm="Restaurar o snapshot {{ snapshot.name }}?">
+                            data-confirm="Restaurar o snapshot {{ snapshot.name }}?"
+                            data-confirm-label="Sim, restaurar"
+                            data-confirm-note="O modo mesclar é aplicado a este snapshot.">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="mode" value="merge">
                         <button class="btn btn-sm btn-outline-warning border-0" type="submit" title="Restaurar (mesclar)">
@@ -144,7 +148,9 @@
                         </button>
                       </form>
                       <form method="post" action="{{ url_for('backup.restore_snapshot', name=snapshot.name) }}"
-                            data-confirm="Restaurar SUBSTITUINDO as tarefas atuais pelo snapshot {{ snapshot.name }}?">
+                            data-confirm="Restaurar substituindo as tarefas atuais pelo snapshot {{ snapshot.name }}?"
+                            data-confirm-label="Sim, substituir"
+                            data-confirm-note="As tarefas atuais serão apagadas antes da restauração.">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="mode" value="replace">
                         <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Restaurar (substituir)">
@@ -152,7 +158,9 @@
                         </button>
                       </form>
                       <form method="post" action="{{ url_for('backup.delete_snapshot', name=snapshot.name) }}"
-                            data-confirm="Excluir o snapshot {{ snapshot.name }}?">
+                            data-confirm="Excluir o snapshot {{ snapshot.name }}?"
+                            data-confirm-label="Sim, excluir"
+                            data-confirm-note="O arquivo de backup será apagado do servidor.">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Excluir">
                           <i class="bi bi-trash"></i>

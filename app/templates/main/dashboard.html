@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import task_row, stat_card, quick_add_form, bulk_bar, section_header, progress_bar, empty_state with context %}
+{% from "_macros.html" import task_row, stat_card, quick_add_form, section_header, progress_bar, empty_state, note_badge with context %}
 {% block title %}Hoje · {{ APP_NAME }}{% endblock %}
 
 {% block content %}
@@ -10,7 +10,9 @@
     <p class="text-body-secondary mb-1 text-uppercase letter-spaced small">Registro diário</p>
     <h1 class="h3 mb-0"><i class="bi bi-sun me-2 text-warning"></i>{{ today_label }}</h1>
   </div>
-  <div class="text-md-end">
+  {#- Região viva: recarregada via JS depois de concluir/reabrir uma tarefa,
+      para o contador e a barra refletirem o novo estado sem F5. -#}
+  <div class="text-md-end" data-live-region="hoje-progresso">
     <div class="small text-body-secondary mb-1">Concluídas hoje</div>
     <div class="d-flex align-items-center gap-2">
       <span class="fw-semibold">{{ done_today|length }}</span>
@@ -19,83 +21,85 @@
   </div>
 </div>
 
+{# O formulário rápido fica FORA das regiões vivas: assim o que você digitou
+   nunca é apagado por uma atualização automática. #}
 {{ quick_add_form(task_form, url_for('tasks.quick_add'), here) }}
 
-<div class="row g-3 mt-1">
-  {{ stat_card('Abertas hoje', open_today|length, 'bi-list-task', 'primary') }}
-  {{ stat_card('Pendências anteriores', overdue|length, 'bi-exclamation-triangle', 'danger', 'role para hoje') }}
-  {{ stat_card('Concluídas', stats.done, 'bi-check2-circle', 'success', stats.completion_rate ~ '% do total') }}
-  {{ stat_card('Agendadas', stats.future, 'bi-fast-forward', 'info', 'em dias futuros') }}
-</div>
-
-{{ bulk_bar((open_today + overdue) | map(attribute='id') | list, here, [
-  ('complete', 'Concluir', 'bi-check2-all', 'btn-outline-success'),
-  ('migrate_tomorrow', 'Migrar p/ amanhã', 'bi-arrow-right-circle', 'btn-outline-warning'),
-  ('cancel', 'Cancelar', 'bi-slash-circle', 'btn-outline-secondary')
-]) }}
-
-{{ section_header('Hoje', 'bi-brightness-high', open_today|length) }}
-{% if open_today %}
-  <div class="task-list">
-    {% for task in open_today %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
+<div data-live-region="hoje-corpo">
+  <div class="row g-3 mt-1">
+    {{ stat_card('Abertas hoje', open_today|length, 'bi-list-task', 'primary') }}
+    {{ stat_card('Pendências anteriores', overdue|length, 'bi-exclamation-triangle', 'danger', 'role para hoje') }}
+    {{ stat_card('Concluídas', stats.done, 'bi-check2-circle', 'success', stats.completion_rate ~ '% do total') }}
+    {{ stat_card('Agendadas', stats.future, 'bi-fast-forward', 'info', 'em dias futuros') }}
   </div>
-{% else %}
-  {{ empty_state('Nada pendente para hoje. Aproveite ou puxe algo do futuro!', 'bi-emoji-smile', false) }}
-{% endif %}
 
-{% if overdue %}
-  {{ section_header('Pendências de dias anteriores', 'bi-arrow-counterclockwise', overdue|length, 'danger') }}
-  <div class="task-list">
-    {% for task in overdue %}{{ task_row(task, next_url=here) }}{% endfor %}
-  </div>
-{% endif %}
-
-{% if done_today %}
-  {{ section_header('Concluídas hoje', 'bi-check2-circle', done_today|length, 'success') }}
-  <div class="task-list">
-    {% for task in done_today %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
-  </div>
-  <form method="post" action="{{ url_for('tasks.delete_completed') }}" class="mt-2"
-        data-confirm="Excluir todas as tarefas concluídas e canceladas?">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="next" value="{{ here }}">
-    <button class="btn btn-sm btn-outline-danger" type="submit">
-      <i class="bi bi-trash me-1"></i>Excluir concluídas/canceladas
-    </button>
-  </form>
-{% endif %}
-
-{{ section_header('Próximos 7 dias', 'bi-calendar-week', upcoming|length, 'info') }}
-{% if upcoming %}
-  <div class="bujo-card p-3">
-    {% for day, items in upcoming | groupby('scheduled_date') %}
-      <div class="upcoming-group d-flex gap-3 py-2 {{ 'border-top border-secondary-subtle' if not loop.first else '' }}">
-        <div class="upcoming-date text-center">
-          <div class="fw-bold">{{ day.strftime('%d') }}</div>
-          <div class="small text-body-secondary text-uppercase">{{ day|date_short_pt|replace(day.strftime('%d'), '')|trim }}</div>
-        </div>
-        <div class="flex-grow-1">
-          {% for task in items %}
-            <div class="d-flex align-items-center gap-2 py-1">
-              <span class="bujo-symbol bujo-symbol-{{ task.kind }}">{{ task.bujo_symbol }}</span>
-              <a href="{{ url_for('tasks.detail', task_id=task.id) }}" class="text-decoration-none text-truncate">{{ task.title }}</a>
-              {% if task.priority != 'none' %}
-                <span class="badge text-bg-{{ PRIORITY_BADGES[task.priority] }}">{{ PRIORITY_LABELS[task.priority] }}</span>
-              {% endif %}
-              {% if task.collection %}<span class="badge text-bg-secondary-subtle text-body-secondary">{{ task.collection }}</span>{% endif %}
-              <span class="ms-auto small text-body-secondary text-nowrap">{{ day|relative }}</span>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-    {% endfor %}
-    <div class="text-end mt-2">
-      <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.future_log') }}">
-        <i class="bi bi-fast-forward me-1"></i>Ver todo o Future Log
-      </a>
+  {{ section_header('Hoje', 'bi-brightness-high', open_today|length, hint='clique no círculo para concluir') }}
+  {% if open_today %}
+    <div class="task-list">
+      {% for task in open_today %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
     </div>
-  </div>
-{% else %}
-  {{ empty_state('Nenhuma tarefa agendada para os próximos dias.', 'bi-calendar-plus', false) }}
-{% endif %}
+  {% else %}
+    {{ empty_state('Nada pendente para hoje. Aproveite ou puxe algo do futuro!', 'bi-emoji-smile', false) }}
+  {% endif %}
+
+  {% if overdue %}
+    {{ section_header('Pendências de dias anteriores', 'bi-arrow-counterclockwise', overdue|length, 'danger', hint='clique no círculo para concluir') }}
+    <div class="task-list">
+      {% for task in overdue %}{{ task_row(task, next_url=here) }}{% endfor %}
+    </div>
+  {% endif %}
+
+  {{ section_header('Concluídas hoje', 'bi-check2-circle', done_today|length, 'success') }}
+  {% if done_today %}
+    <div class="task-list">
+      {% for task in done_today %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
+    </div>
+    <form method="post" action="{{ url_for('tasks.delete_completed') }}" class="mt-2"
+          data-confirm="Excluir todas as tarefas concluídas e canceladas?"
+          data-confirm-label="Sim, excluir todas"
+          data-confirm-note="Elas serão apagadas permanentemente.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <button class="btn btn-sm btn-outline-danger" type="submit">
+        <i class="bi bi-trash me-1"></i>Excluir concluídas/canceladas
+      </button>
+    </form>
+  {% else %}
+    {{ empty_state('Nada concluído hoje ainda. Clique no círculo • de uma tarefa para riscá-la.', 'bi-check2-circle', false) }}
+  {% endif %}
+
+  {{ section_header('Próximos 7 dias', 'bi-calendar-week', upcoming|length, 'info') }}
+  {% if upcoming %}
+    <div class="bujo-card p-3">
+      {% for day, items in upcoming | groupby('scheduled_date') %}
+        <div class="upcoming-group d-flex gap-3 py-2 {{ 'border-top border-secondary-subtle' if not loop.first else '' }}">
+          <div class="upcoming-date text-center">
+            <div class="fw-bold">{{ day.strftime('%d') }}</div>
+            <div class="small text-body-secondary text-uppercase">{{ day|date_short_pt|replace(day.strftime('%d'), '')|trim }}</div>
+          </div>
+          <div class="flex-grow-1">
+            {% for task in items %}
+              <div class="d-flex align-items-center gap-2 py-1">
+                <span class="bujo-symbol bujo-symbol-{{ task.kind }}">{{ task.bujo_symbol }}</span>
+                <a href="{{ url_for('tasks.detail', task_id=task.id) }}" class="text-decoration-none text-truncate">{{ task.title }}</a>
+                {% if task.priority != 'none' %}
+                  <span class="badge text-bg-{{ PRIORITY_BADGES[task.priority] }}">{{ PRIORITY_LABELS[task.priority] }}</span>
+                {% endif %}
+                {{ note_badge(task) }}
+                <span class="ms-auto small text-body-secondary text-nowrap">{{ day|relative }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+      <div class="text-end mt-2">
+        <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.future_log') }}">
+          <i class="bi bi-fast-forward me-1"></i>Ver todo o Future Log
+        </a>
+      </div>
+    </div>
+  {% else %}
+    {{ empty_state('Nenhuma tarefa agendada para os próximos dias.', 'bi-calendar-plus', false) }}
+  {% endif %}
+</div>
 {% endblock %}

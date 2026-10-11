@@ -9,6 +9,10 @@ WTForms==3.2.1
 SQLAlchemy==2.0.36
 email-validator==2.2.0
 
+# Anotações em Markdown (renderização + sanitização do HTML)
+Markdown==3.11
+nh3==0.3.7
+
 # Production WSGI server
 gunicorn==23.0.0
 

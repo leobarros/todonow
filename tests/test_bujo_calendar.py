@@ -27,10 +27,12 @@ def test_daily_log_navigates_to_specific_day(auth_client, app, user, sample_task
     assert b"Nota antiga" in response.data
 
 
-def test_daily_log_groups_by_collection(auth_client, app, user, sample_tasks):
-    response = auth_client.get("/day")
-    assert b"Trabalho" in response.data
-    assert b"Sem cole" in response.data
+def test_daily_log_lists_entries_flat(auth_client, app, user, sample_tasks):
+    """Sem coleções: as entradas do dia aparecem em lista simples."""
+    body = auth_client.get("/day").data
+    assert b"Tarefa de hoje" in body
+    assert b"Sem cole" not in body
+    assert b"collection-title" not in body
 
 
 def test_monthly_log_lists_month(auth_client, app, user, sample_tasks):

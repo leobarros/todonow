@@ -99,19 +99,15 @@
 
   <div class="col-12 col-lg-6">
     <div class="bujo-card p-4 h-100">
-      <h2 class="h6"><i class="bi bi-collection me-2"></i>Minhas coleções</h2>
-      {% if stats.collections %}
-        <div class="d-flex flex-wrap gap-2">
-          {% for collection in stats.collections %}
-            <a class="badge rounded-pill text-bg-secondary text-decoration-none p-2"
-               href="{{ url_for('tasks.index', collection=collection) }}">
-              <i class="bi bi-tag me-1"></i>{{ collection }}
-            </a>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="text-body-secondary mb-0">Crie coleções ao adicionar tarefas (ex.: Trabalho, Infra, Pessoal).</p>
-      {% endif %}
+      <h2 class="h6"><i class="bi bi-journal-bookmark me-2"></i>Como usar o BUJO aqui</h2>
+      <ul class="list-unstyled mb-0 small legend-list">
+        <li><span class="bujo-symbol">•</span> tarefa — algo a fazer</li>
+        <li><span class="bujo-symbol">○</span> evento — algo com data/hora</li>
+        <li><span class="bujo-symbol">–</span> nota — informação solta</li>
+        <li><span class="bujo-symbol">✕</span> concluída — clique no símbolo para riscar</li>
+        <li><span class="bujo-symbol">&gt;</span> migrada — rolou para outro dia</li>
+        <li><span class="signifier">*</span> / <span class="signifier">!</span> prioridade alta / média</li>
+      </ul>
       <hr>
       <p class="small text-body-secondary mb-2">Progresso geral</p>
       {{ progress_bar(stats.done, stats.total) }}

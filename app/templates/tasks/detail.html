@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import bujo_symbol, priority_badge, kind_badge, task_dates, task_row with context %}
+{% from "_macros.html" import bujo_symbol, priority_badge, kind_badge, task_dates, migrate_menu, markdown_editor with context %}
 {% block title %}{{ task.title }} · {{ APP_NAME }}{% endblock %}
 
 {% block content %}
@@ -14,6 +14,7 @@
       </ol>
     </nav>
 
+    <div data-live-region="tarefa-detalhe">
     <article class="bujo-card p-4{{ ' is-done' if task.is_strikethrough else '' }}">
       <div class="d-flex align-items-start gap-3">
         <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}" class="js-toggle-task">
@@ -35,10 +36,6 @@
             <span class="badge rounded-pill {{ 'text-bg-success' if task.is_done else ('text-bg-danger' if task.is_overdue() else 'text-bg-secondary') }}">
               {{ task.status_label }}
             </span>
-            {% if task.collection %}
-              <a class="badge rounded-pill text-bg-secondary text-decoration-none"
-                 href="{{ url_for('tasks.index', collection=task.collection) }}"><i class="bi bi-tag me-1"></i>{{ task.collection }}</a>
-            {% endif %}
           </div>
         </div>
       </div>
@@ -71,39 +68,80 @@
         <dd class="col-sm-9"><code>{{ task.uuid }}</code></dd>
       </dl>
 
-      {% if task.notes %}
-        <hr>
-        <h2 class="h6"><i class="bi bi-card-text me-2"></i>Notas</h2>
-        <div class="task-notes">{{ task.notes|nl2br }}</div>
-      {% endif %}
-
       <hr>
 
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-primary" href="{{ url_for('tasks.edit', task_id=task.id, next=here) }}">
           <i class="bi bi-pencil me-1"></i>Editar
         </a>
-        {% if not task.is_closed %}
-          <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="preset" value="tomorrow">
-            <input type="hidden" name="next" value="{{ here }}">
-            <button class="btn btn-outline-warning" type="submit"><i class="bi bi-arrow-right-circle me-1"></i>Migrar p/ amanhã</button>
-          </form>
+        {% if task.is_open %}
+          {{ migrate_menu(task, here, 'btn btn-outline-warning', true) }}
         {% endif %}
         <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}" class="ms-auto"
-              data-confirm="Remover esta tarefa definitivamente?">
+              data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;?"
+              data-confirm-label="Sim, remover"
+              data-confirm-note="A tarefa será apagada permanentemente.">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ url_for('tasks.index') }}">
           <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1"></i>Remover</button>
         </form>
       </div>
     </article>
+    </div>{# /região viva #}
 
-    {% if task.migrated_from %}
-      <h2 class="h6 mt-4"><i class="bi bi-clock-history me-2"></i>Origem</h2>
-      {{ task_row(task.migrated_from, next_url=here, show_actions=false) }}
-    {% endif %}
-  </div>
-</div>
+    {#- Anotações ficam fora da região viva: concluir/reabrir a tarefa atualiza o
+        cartão acima sem apagar um texto que você ainda não salvou. -#}
+    <section class="bujo-card p-4 mt-3" id="anotacoes">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <h2 class="h5 mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Anotações</h2>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
+                data-bs-target="#notes-editor" aria-expanded="{{ 'false' if task.notes else 'true' }}"
+                aria-controls="notes-editor">
+          <i class="bi bi-pencil-square me-1"></i>{{ 'Editar' if task.notes else 'Escrever' }}
+        </button>
+      </div>
+
+      {% if task.notes %}
+        <div class="md-body" data-notes-view>{{ task.notes|markdown }}</div>
+        <p class="text-body-secondary small mb-0 mt-2">
+          <i class="bi bi-clock-history me-1"></i>Última alteração em {{ task.updated_at.strftime('%d/%m/%Y %H:%M') }}
+        </p>
+      {% else %}
+        <p class="text-body-secondary mb-0" data-notes-view>
+          Registre aqui o que aconteceu com esta tarefa: um diário curto de atividades,
+          com itens BUJO, listas e links.
+        </p>
+      {% endif %}
+
+      <div class="collapse {{ '' if task.notes else 'show' }} mt-3" id="notes-editor">
+        <form method="post" action="{{ url_for('tasks.save_notes', task_id=task.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ here }}">
+          {% call markdown_editor('task-notes-inline', url_for('tasks.render_notes'), value=task.notes or '') %}
+            <textarea class="form-control" id="task-notes-inline" name="notes" rows="8"
+                      placeholder="O que aconteceu com esta tarefa?&#10;&#10;- [ ] próximo passo&#10;- [x] o que já foi feito">{{ task.notes or '' }}</textarea>
+          {% endcall %}
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Salvar anotações</button>
+            {% if task.notes %}
+              <button type="submit" class="btn btn-outline-danger" name="clear_notes" value="1"
+                      data-confirm="Apagar todas as anotações desta tarefa?"
+                      data-confirm-label="Sim, apagar"
+                      data-confirm-note="O texto será removido permanentemente.">
+                <i class="bi bi-eraser me-1"></i>Limpar
+              </button>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>{# /.col #}
+</div>{# /.row #}
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/turndown.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/turndown-plugin-gfm.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/notes.js') }}"></script>
 {% endblock %}

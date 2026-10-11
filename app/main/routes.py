@@ -50,9 +50,11 @@ def dashboard():
     completed_today = Task.completed_on(current_user, today).all()
     upcoming = Task.upcoming(current_user, today, until=today + timedelta(days=7)).all()
 
-    done_today_ids = {task.id for task in today_tasks if task.is_done}
     open_today = [t for t in today_tasks if t.is_open]
-    done_today = [t for t in today_tasks if t.status != STATUS_OPEN]
+    # Só o que foi realmente concluído entra aqui: uma tarefa migrada para
+    # amanhã continua pendente e não pode aparecer como concluída hoje.
+    done_today = [t for t in today_tasks if t.is_done]
+    done_today_ids = {task.id for task in done_today}
     for task in completed_today:
         if task.id not in done_today_ids:
             done_today.append(task)
@@ -66,7 +68,6 @@ def dashboard():
         upcoming=upcoming,
         task_form=task_form,
         stats=Task.stats(current_user),
-        collections=Task.collections(current_user),
     )
 
 
@@ -88,10 +89,6 @@ def daily_log(day_iso: str | None = None):
     entries = Task.scheduled_on(current_user, day).all()
     carried = Task.pending_before(current_user, day).all()
     completed = Task.completed_on(current_user, day).all()
-    collections = OrderedDict()
-    for task in entries:
-        collections.setdefault(task.collection or "Sem coleção", []).append(task)
-
     return render_template(
         "main/daily_log.html",
         day=day,
@@ -101,7 +98,6 @@ def daily_log(day_iso: str | None = None):
         entries=entries,
         carried=carried,
         completed=completed,
-        collections=collections,
         task_form=task_form,
         stats=Task.stats(current_user),
     )
@@ -197,7 +193,6 @@ def calendar():
         "main/calendar.html",
         task_form=task_form,
         stats=Task.stats(current_user),
-        collections=Task.collections(current_user),
     )
 
 
@@ -207,7 +202,7 @@ def calendar_feed():
     """FullCalendar JSON feed.
 
     Accepts FullCalendar's ``start``/``end`` (ISO datetimes) plus optional
-    ``status``/``kind``/``collection`` filters.
+    ``status``/``kind`` filters.
     """
     today = today_local()
     start = parse_date(request.args.get("start"), add_months(today, -3))
@@ -217,13 +212,10 @@ def calendar_feed():
 
     status = (request.args.get("status") or "").strip()
     kind = (request.args.get("kind") or "").strip()
-    collection = (request.args.get("collection") or "").strip()
     if status:
         query = query.filter(Task.status == status)
     if kind:
         query = query.filter(Task.kind == kind)
-    if collection:
-        query = query.filter(Task.collection == collection)
 
     show_due = request.args.get("show_due", "1") not in {"0", "false", "no"}
     events: list[dict] = []
@@ -262,7 +254,6 @@ def _event_payload(task: Task, today: date, as_due: bool = False) -> dict:
             "kind": task.kind,
             "status": task.status,
             "priority": task.priority,
-            "collection": task.collection,
             "notes": task.notes,
             "isDue": as_due,
             "symbol": task.bujo_symbol,

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import task_row, section_header, bulk_bar, empty_state, progress_bar with context %}
+{% from "_macros.html" import task_row, section_header, empty_state, progress_bar with context %}
 {% block title %}{{ month_label }} · Mensal{% endblock %}
 
 {% block content %}
@@ -32,18 +32,21 @@
     </div>
   </div>
   <div class="col-12 col-lg-4">
-    <div class="bujo-card p-3 h-100 d-flex flex-wrap gap-2 align-items-center">
-      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.calendar') }}"><i class="bi bi-calendar-week me-1"></i>Calendário</a>
-      <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.future_log') }}"><i class="bi bi-fast-forward me-1"></i>Future Log</a>
-      <a class="btn btn-sm btn-outline-success" href="{{ url_for('tasks.create', date=first.isoformat()) }}"><i class="bi bi-plus-lg me-1"></i>Nova no mês</a>
+    {#- Grade de uma coluna: os botões ficam alinhados entre si em qualquer
+        largura, em vez de quebrarem em linhas de tamanhos diferentes. -#}
+    <div class="bujo-card p-3 h-100 d-grid gap-2 align-content-center">
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.calendar') }}">
+        <i class="bi bi-calendar-week me-1"></i>Calendário
+      </a>
+      <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.future_log') }}">
+        <i class="bi bi-fast-forward me-1"></i>Future Log
+      </a>
+      <a class="btn btn-sm btn-outline-success" href="{{ url_for('tasks.create', date=first.isoformat()) }}">
+        <i class="bi bi-plus-lg me-1"></i>Nova no mês
+      </a>
     </div>
   </div>
 </div>
-
-{{ bulk_bar(tasks | selectattr('status', 'equalto', 'open') | map(attribute='id') | list, here, [
-  ('complete', 'Concluir abertas do mês', 'bi-check2-all', 'btn-outline-success'),
-  ('migrate_week', 'Migrar abertas +7 dias', 'bi-arrow-right-circle', 'btn-outline-warning')
-]) }}
 
 <div class="bujo-card p-0 overflow-hidden">
   <div class="table-responsive">

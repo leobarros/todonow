@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import markdown_editor with context %}
 {% block title %}{{ 'Editar' if task else 'Nova' }} tarefa · {{ APP_NAME }}{% endblock %}
 
 {% block content %}
@@ -76,20 +77,11 @@
           </div>
 
           <div class="col-12">
-            {{ form.collection.label(class="form-label") }}
-            {{ form.collection(class="form-control", list="collection-options") }}
-            <datalist id="collection-options">
-              {% for collection in Task.collections(current_user) %}
-                <option value="{{ collection }}"></option>
-              {% endfor %}
-            </datalist>
-            <div class="form-text">Coleções agrupam as entradas do dia (ex.: Trabalho, Infra, Pessoal).</div>
-          </div>
-
-          <div class="col-12">
             {{ form.notes.label(class="form-label") }}
-            {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else "")) }}
-            {% for error in form.notes.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+            {% call markdown_editor('task-notes-editor', url_for('tasks.render_notes'), value=form.notes.data or '') %}
+              {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else ""), id="task-notes-editor") }}
+            {% endcall %}
+            {% for error in form.notes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
           </div>
         </div>
 
@@ -112,7 +104,9 @@
                 </button>
               </form>
               <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}"
-                    data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;? Esta ação não pode ser desfeita.">
+                    data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;?"
+                    data-confirm-label="Sim, remover"
+                    data-confirm-note="A tarefa será apagada permanentemente.">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ url_for('tasks.index') }}">
                 <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1"></i>Remover</button>
@@ -133,4 +127,11 @@
     {% endif %}
   </div>
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/turndown.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/turndown-plugin-gfm.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/notes.js') }}"></script>
 {% endblock %}

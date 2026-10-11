@@ -131,6 +131,36 @@
 </footer>
 
 <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+
+{#- Confirmação em modal Bootstrap, no lugar do window.confirm nativo (que
+    ignora o tema e destoa do visual do app). O todonow.js preenche o texto a
+    partir de data-confirm / data-confirm-note / data-confirm-label. -#}
+<div class="modal fade" id="confirm-modal" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="h6 modal-title" id="confirm-modal-title">
+          <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Confirmar ação
+        </h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0" id="confirm-modal-message">Tem certeza?</p>
+        <p class="small text-body-secondary mb-0 mt-2 d-none" id="confirm-modal-note"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="confirm-modal-cancel">
+          <i class="bi bi-x-lg me-1"></i>Cancelar
+        </button>
+        <button type="button" class="btn btn-warning" id="confirm-modal-ok">
+          <i class="bi bi-check2 me-1"></i>Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/todonow.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

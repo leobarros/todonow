@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, DateField, SelectField, StringField, SubmitField, TextAreaField
+from wtforms import DateField, SelectField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
 from ..utils import (
@@ -29,15 +29,18 @@ class TaskForm(FlaskForm):
         validators=[DataRequired(message="Descreva a tarefa."), Length(max=255)],
         render_kw={"autofocus": True, "placeholder": "O que precisa ser feito?"},
     )
-    notes = TextAreaField("Notas", validators=[Optional(), Length(max=5000)], render_kw={"rows": 4})
+    notes = TextAreaField(
+        "Anotações",
+        validators=[Optional(), Length(max=20000, message="Use no máximo 20.000 caracteres.")],
+        render_kw={
+            "rows": 10,
+            "placeholder": "Escreva o que aconteceu… Markdown é bem-vindo:\n\n"
+            "- [ ] atividade pendente\n- [x] atividade feita\n\n**destaque**, *ênfase*, `código`",
+        },
+    )
     kind = SelectField("Tipo", choices=_choices(TASK_KINDS, KIND_LABELS), default="task")
     status = SelectField("Situação", choices=_choices(TASK_STATUSES, STATUS_LABELS), default="open")
     priority = SelectField("Prioridade", choices=_choices(TASK_PRIORITIES, PRIORITY_LABELS), default="none")
-    collection = StringField(
-        "Coleção",
-        validators=[Optional(), Length(max=64)],
-        render_kw={"placeholder": "Ex.: Trabalho, Pessoal, Projetos"},
-    )
     scheduled_date = DateField(
         "Começa em",
         validators=[DataRequired(message="Informe a data de início.")],
@@ -67,29 +70,4 @@ class QuickTaskForm(FlaskForm):
     kind = SelectField("Tipo", choices=_choices(TASK_KINDS, KIND_LABELS), default="task")
     priority = SelectField("Prioridade", choices=_choices(TASK_PRIORITIES, PRIORITY_LABELS), default="none")
     scheduled_date = DateField("Data", validators=[Optional()], format="%Y-%m-%d", default=today_local)
-    collection = StringField("Coleção", validators=[Optional(), Length(max=64)])
     submit = SubmitField("Adicionar")
-
-
-class FilterForm(FlaskForm):
-    """Read-only filter form; CSRF disabled because it only issues GETs."""
-
-    class Meta:
-        csrf = False
-
-    q = StringField("Buscar", validators=[Optional(), Length(max=120)])
-    status = SelectField(
-        "Situação",
-        choices=[("", "Todas")] + _choices(TASK_STATUSES, STATUS_LABELS),
-        validators=[Optional()],
-        default="",
-    )
-    kind = SelectField(
-        "Tipo",
-        choices=[("", "Todos")] + _choices(TASK_KINDS, KIND_LABELS),
-        validators=[Optional()],
-        default="",
-    )
-    collection = SelectField("Coleção", choices=[("", "Todas")], validators=[Optional()], default="")
-    include_done = BooleanField("Mostrar concluídas", default=True)
-    submit = SubmitField("Filtrar")

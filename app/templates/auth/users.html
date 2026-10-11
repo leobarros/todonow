@@ -96,7 +96,9 @@
                 </form>
 
                 <form method="post" action="{{ url_for('auth.toggle_active', user_id=user.id) }}"
-                      data-confirm="{{ 'Desativar' if user.is_active else 'Ativar' }} a conta de {{ user.username }}?">
+                      data-confirm="{{ 'Desativar' if user.is_active else 'Ativar' }} a conta de {{ user.username }}?"
+                      data-confirm-label="Sim, continuar"
+                      data-confirm-note="{{ 'A pessoa não conseguirá entrar enquanto estiver desativada.' if user.is_active else 'A pessoa voltará a conseguir entrar.' }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button class="btn btn-sm btn-outline-secondary border-0" type="submit"
                           title="{{ 'Desativar' if user.is_active else 'Ativar' }}">
@@ -105,7 +107,9 @@
                 </form>
 
                 <form method="post" action="{{ url_for('auth.delete_user', user_id=user.id) }}"
-                      data-confirm="Excluir {{ user.username }} e TODAS as tarefas dele?">
+                      data-confirm="Excluir o usuário {{ user.username }}?"
+                      data-confirm-label="Sim, excluir"
+                      data-confirm-note="Todas as tarefas desta conta serão apagadas permanentemente.">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Excluir"><i class="bi bi-trash"></i></button>
                 </form>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 import click
@@ -12,7 +12,7 @@ from flask.cli import with_appcontext
 
 from .extensions import db
 from .models import Task, User
-from .utils import now_local, today_local
+from .utils import STATUS_CANCELLED, STATUS_DONE, STATUS_OPEN, now_local, today_local
 
 
 def register_cli(app) -> None:
@@ -25,6 +25,7 @@ def register_cli(app) -> None:
     app.cli.add_command(snapshots_cmd)
     app.cli.add_command(purge_completed)
     app.cli.add_command(seed_demo)
+    app.cli.add_command(dedupe_tasks)
 
 
 @click.command("init-db")
@@ -204,23 +205,22 @@ def seed_demo(username: str):
 
     today = today_local()
     samples = [
-        ("Revisar o backup do homelab", "task", "high", "Infra", 0, None),
-        ("Planejar a semana no journal", "task", "medium", "Pessoal", 0, None),
-        ("Reunião de alinhamento", "event", "none", "Trabalho", 0, 0),
-        ("Ideia: dashboard de métricas", "note", "low", "Projetos", 0, None),
-        ("Pagar a fatura do servidor", "task", "high", "Finanças", 1, 3),
-        ("Trocar o SSD do NAS", "task", "medium", "Infra", 5, 12),
-        ("Aniversário do João", "event", "low", "Pessoal", 9, 9),
-        ("Ler 30 páginas", "task", "low", "Pessoal", 2, None),
+        ("Revisar o backup do homelab", "task", "high", 0, None),
+        ("Planejar a semana no journal", "task", "medium", 0, None),
+        ("Reunião de alinhamento", "event", "none", 0, 0),
+        ("Ideia: dashboard de métricas", "note", "low", 0, None),
+        ("Pagar a fatura do servidor", "task", "high", 1, 3),
+        ("Trocar o SSD do NAS", "task", "medium", 5, 12),
+        ("Aniversário do João", "event", "low", 9, 9),
+        ("Ler 30 páginas", "task", "low", 2, None),
     ]
     created = 0
-    for index, (title, kind, priority, collection, offset, due_offset) in enumerate(samples):
+    for index, (title, kind, priority, offset, due_offset) in enumerate(samples):
         task = Task(
             user_id=user.id,
             title=title,
             kind=kind,
             priority=priority,
-            collection=collection,
             scheduled_date=today + timedelta(days=offset),
             due_date=today + timedelta(days=due_offset) if due_offset is not None else None,
             position=index,
@@ -229,6 +229,96 @@ def seed_demo(username: str):
         created += 1
     db.session.commit()
     click.secho(f"{created} tarefa(s) de exemplo criada(s) para '{user.username}'.", fg="green")
+
+
+@click.command("dedupe-tasks")
+@click.option("--username", default=None, help="Restringe a um usuário")
+@click.option(
+    "--across-days",
+    is_flag=True,
+    help="Também remove artefatos da migração antiga que ficaram em dias diferentes",
+)
+@click.option("--apply", "apply_changes", is_flag=True, help="Remove de fato (sem isso, só mostra o plano)")
+@with_appcontext
+def dedupe_tasks(username: str | None, across_days: bool, apply_changes: bool):
+    """Remove tarefas duplicadas criadas pela migração antiga.
+
+    * mesmo dia: mesmo usuário, título, data e situação (o bug copiava a tarefa
+      a cada migração);
+    * ``--across-days``: pares ligados por ``migrated_from_id`` ou uma entrada
+      já concluída/cancelada que ficou atrás de outra aberta com o mesmo nome.
+      Tarefas repetidas legítimas (um hábito diário, por exemplo) são
+      preservadas: sem ligação e ambas abertas, nada é removido.
+
+    Rode sem ``--apply`` primeiro para revisar o plano.
+    """
+    query = Task.query
+    if username:
+        user = User.query.filter(db.func.lower(User.username) == username.lower()).first()
+        if not user:
+            raise click.ClickException(f"Usuário '{username}' não encontrado.")
+        query = query.filter(Task.user_id == user.id)
+
+    tarefas = query.order_by(Task.id).all()
+    duplicadas: list[tuple[Task, Task, str]] = []
+
+    # ---- 1) duplicatas exatas no mesmo dia ----
+    grupos: dict[tuple, list[Task]] = {}
+    for task in tarefas:
+        chave = (task.user_id, (task.title or "").strip().lower(), task.scheduled_date, task.status)
+        grupos.setdefault(chave, []).append(task)
+    for itens in grupos.values():
+        if len(itens) < 2:
+            continue
+        manter, *resto = itens
+        for dup in resto:
+            duplicadas.append((manter, dup, "mesmo dia"))
+
+    # ---- 2) artefatos da migração-cópia que sobraram em dias diferentes ----
+    if across_days:
+        por_titulo: dict[tuple, list[Task]] = {}
+        for task in tarefas:
+            por_titulo.setdefault((task.user_id, (task.title or "").strip().lower()), []).append(task)
+
+        ja_marcadas = {id(dup) for _, dup, _ in duplicadas}
+        for itens in por_titulo.values():
+            if len(itens) < 2:
+                continue
+            abertas = [t for t in itens if t.status == STATUS_OPEN]
+            if not abertas:
+                continue
+            manter = max(abertas, key=lambda t: (t.scheduled_date or date.min, t.id))
+            ids = {t.id for t in itens}
+            for task in itens:
+                if task.id == manter.id or id(task) in ja_marcadas:
+                    continue
+                ligada = task.migrated_from_id in ids or any(o.migrated_from_id == task.id for o in itens)
+                fechada = task.status in {STATUS_DONE, STATUS_CANCELLED}
+                anterior = (task.scheduled_date or date.min) <= (manter.scheduled_date or date.min)
+                if anterior and (ligada or fechada):
+                    duplicadas.append((manter, task, "artefato de migração"))
+                    ja_marcadas.add(id(task))
+
+    if not duplicadas:
+        click.secho("Nenhuma duplicata encontrada.", fg="green")
+        return
+
+    click.echo(f"{len(duplicadas)} duplicata(s) encontrada(s):")
+    for manter, dup, motivo in duplicadas:
+        click.echo(
+            f"  mantém #{manter.id} e remove #{dup.id} ({motivo}) — '{manter.title}' "
+            f"[{dup.scheduled_date}, {dup.status}, uuid {dup.uuid[:8]}]"
+        )
+
+    if not apply_changes:
+        click.secho("Nada foi alterado. Rode com --apply para remover.", fg="yellow")
+        return
+
+    for manter, dup, _ in duplicadas:
+        manter.migration_count = (manter.migration_count or 0) + (dup.migration_count or 0)
+        db.session.delete(dup)
+    db.session.commit()
+    click.secho(f"{len(duplicadas)} duplicata(s) removida(s).", fg="green")
 
 
 def main() -> int:  # pragma: no cover - convenience entry point

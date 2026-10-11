@@ -55,7 +55,7 @@ STATUS_LABELS = {
 STATUS_SYMBOLS = {
     STATUS_OPEN: "",
     STATUS_DONE: "✕",
-    STATUS_MIGRATED: ">",
+    STATUS_MIGRATED: ">",  # apenas para registros antigos
     STATUS_CANCELLED: "~",
 }
 

@@ -141,6 +141,8 @@ class Task(TimestampMixin, db.Model):
     kind = db.Column(db.String(16), default=KIND_TASK, nullable=False)
     status = db.Column(db.String(16), default=STATUS_OPEN, nullable=False, index=True)
     priority = db.Column(db.String(16), default=PRIORITY_NONE, nullable=False)
+    # Campo legado: saiu da interface, mas continua no banco e no backup para
+    # não perder dados de instâncias antigas.
     collection = db.Column(db.String(64), nullable=True, index=True)
 
     # The day the task "starts" — defaults to today, may be scheduled ahead.
@@ -149,6 +151,10 @@ class Task(TimestampMixin, db.Model):
     due_date = db.Column(db.Date, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     migrated_to_date = db.Column(db.Date, nullable=True)
+    # Histórico: quantas vezes a entrada rolou para outro dia e quando.
+    migration_count = db.Column(db.Integer, default=0, nullable=False, server_default="0")
+    migrated_at = db.Column(db.DateTime, nullable=True)
+    # Legado: a migração antiga criava uma cópia e apontava para a original.
     migrated_from_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
 
     position = db.Column(db.Integer, default=0, nullable=False)
@@ -167,7 +173,13 @@ class Task(TimestampMixin, db.Model):
 
     @property
     def is_migrated(self) -> bool:
+        """Dados antigos marcados com a situação ``migrated``."""
         return self.status == STATUS_MIGRATED
+
+    @property
+    def was_migrated(self) -> bool:
+        """A entrada já rolou de dia alguma vez (não é conclusão)."""
+        return bool(self.migration_count)
 
     @property
     def is_cancelled(self) -> bool:
@@ -235,32 +247,23 @@ class Task(TimestampMixin, db.Model):
         self.complete()
         return True
 
-    def migrate_to(self, target: date, session=None) -> Task:
-        """BUJO migration: mark this entry ``>`` and carry it to *target*.
+    def migrate_to(self, target: date) -> Task:
+        """BUJO: rola a entrada para *target* — movendo a mesma tarefa.
 
-        Returns the successor task (already added to the session when given).
+        Migrar **não** é concluir e **não** cria cópia: a tarefa apenas muda de
+        dia (o histórico fica em ``migration_count``/``migrated_at``). Cópias
+        geravam duplicidade no mesmo dia, que não existe na vida real.
         """
         target = parse_date(target, today_local() + timedelta(days=1))
-        session = session or db.session
-
-        successor = Task(
-            user_id=self.user_id,
-            title=self.title,
-            notes=self.notes,
-            kind=self.kind,
-            priority=self.priority,
-            collection=self.collection,
-            scheduled_date=target,
-            due_date=self.due_date,
-            position=self.position,
-            migrated_from_id=self.id,
-        )
-        self.status = STATUS_MIGRATED
+        self.scheduled_date = target
         self.migrated_to_date = target
+        self.migration_count = (self.migration_count or 0) + 1
+        self.migrated_at = now_local()
         self.completed_at = None
-
-        session.add(successor)
-        return successor
+        # Uma entrada migrada volta a ser uma pendência normal.
+        if self.status == STATUS_MIGRATED:
+            self.status = STATUS_OPEN
+        return self
 
     # --- queries --------------------------------------------------------
     @classmethod
@@ -304,17 +307,6 @@ class Task(TimestampMixin, db.Model):
         )
 
     @classmethod
-    def collections(cls, user) -> list[str]:
-        rows = (
-            db.session.query(cls.collection)
-            .filter(cls.user_id == user.id, cls.collection.isnot(None), cls.collection != "")
-            .distinct()
-            .order_by(cls.collection)
-            .all()
-        )
-        return [row[0] for row in rows]
-
-    @classmethod
     def stats(cls, user) -> dict:
         day = today_local()
         base = cls.for_user(user)
@@ -348,6 +340,8 @@ class Task(TimestampMixin, db.Model):
             "due_date": iso(self.due_date),
             "completed_at": iso(self.completed_at),
             "migrated_to_date": iso(self.migrated_to_date),
+            "migration_count": self.migration_count or 0,
+            "migrated_at": iso(self.migrated_at),
             "position": self.position,
             "created_at": iso(self.created_at),
             "updated_at": iso(self.updated_at),
@@ -377,6 +371,11 @@ class Task(TimestampMixin, db.Model):
         self.due_date = parse_date(data.get("due_date"))
         self.completed_at = parse_datetime(data.get("completed_at"))
         self.migrated_to_date = parse_date(data.get("migrated_to_date"))
+        try:
+            self.migration_count = int(data.get("migration_count") or 0)
+        except (TypeError, ValueError):
+            self.migration_count = 0
+        self.migrated_at = parse_datetime(data.get("migrated_at"))
         try:
             self.position = int(data.get("position") or 0)
         except (TypeError, ValueError):

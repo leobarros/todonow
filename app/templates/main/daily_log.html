@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% from "_macros.html" import task_row, quick_add_form, bulk_bar, section_header, day_nav, empty_state with context %}
-{% block title %}{{ day|date_pt }} · Diário{% endblock %}
+{% from "_macros.html" import task_row, quick_add_form, section_header, day_nav, empty_state with context %}
+{% block title %}{{ day|date_pt }} · Diário
+{% endblock %}
 
 {% block content %}
 {% set here = url_for('main.daily_log', day_iso=day.isoformat()) %}
@@ -18,7 +19,7 @@
 
 <div class="row g-3 mb-3">
   <div class="col-12 col-lg-8">
-    {{ quick_add_form(task_form, url_for('tasks.quick_add'), here, compact=true) }}
+    {{ quick_add_form(task_form, url_for('tasks.quick_add'), here) }}
   </div>
   <div class="col-12 col-lg-4">
     <div class="bujo-card p-3 h-100">
@@ -39,32 +40,18 @@
   </div>
 </div>
 
+<div data-live-region="dia-conteudo">
 {% if carried %}
-  {{ section_header('Migrar pendências de dias anteriores', 'bi-arrow-counterclockwise', carried|length, 'danger') }}
-  {{ bulk_bar(carried | map(attribute='id') | list, here, [
-    ('migrate_tomorrow', 'Migrar todas p/ amanhã', 'bi-arrow-right-circle', 'btn-outline-warning'),
-    ('complete', 'Concluir todas', 'bi-check2-all', 'btn-outline-success'),
-    ('delete', 'Excluir todas', 'bi-trash', 'btn-outline-danger')
-  ]) }}
+  {{ section_header('Pendências de dias anteriores', 'bi-arrow-counterclockwise', carried|length, 'danger', hint='clique no círculo para concluir') }}
   <div class="task-list mt-2">
     {% for task in carried %}{{ task_row(task, next_url=here) }}{% endfor %}
   </div>
 {% endif %}
 
-{{ section_header('Entradas do dia', 'bi-journal-text', entries|length) }}
+{{ section_header('Entradas do dia', 'bi-journal-text', entries|length, hint='clique no círculo para concluir') }}
 {% if entries %}
-  <div class="bujo-page">
-    {% for collection, items in collections.items() %}
-      <div class="bujo-collection mb-3">
-        <div class="collection-title">
-          <i class="bi bi-tag me-1"></i>{{ collection }}
-          <span class="badge rounded-pill text-bg-secondary ms-1">{{ items|length }}</span>
-        </div>
-        <div class="task-list">
-          {% for task in items %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
-        </div>
-      </div>
-    {% endfor %}
+  <div class="task-list">
+    {% for task in entries %}{{ task_row(task, next_url=here, show_start=false) }}{% endfor %}
   </div>
 {% else %}
   {{ empty_state('Nenhuma entrada registrada neste dia.', 'bi-journal', false) }}
@@ -77,4 +64,5 @@
     {% for task in extra_completed %}{{ task_row(task, next_url=here) }}{% endfor %}
   </div>
 {% endif %}
+</div>{# /região viva #}
 {% endblock %}

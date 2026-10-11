@@ -6,19 +6,109 @@
   var CSRF = csrfMeta ? csrfMeta.content : '';
 
   /* ------------------------------------------------------------------
-   * Confirmation dialogs: <form data-confirm="..."> or a submit button
-   * carrying data-confirm.
+   * Confirmação em modal Bootstrap (segue claro/escuro), no lugar do
+   * window.confirm nativo que quebrava o visual do app.
+   *
+   * Uso nos templates:
+   *   <form data-confirm="Remover a tarefa X?">                  (no form)
+   *   <button data-confirm="..." data-confirm-label="Sim, remover"
+   *           data-confirm-note="A tarefa será apagada permanentemente.">
    * ------------------------------------------------------------------ */
+  var confirmEl = document.getElementById('confirm-modal');
+  var confirmModal =
+    confirmEl && window.bootstrap && window.bootstrap.Modal ? new window.bootstrap.Modal(confirmEl) : null;
+  var confirmState = { form: null, submitter: null };
+
+  function submitConfirmed(form, submitter) {
+    if (!form) return;
+    // Marca para o handler abaixo não perguntar de novo.
+    form.dataset.confirmed = '1';
+    try {
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit(submitter && form.contains(submitter) ? submitter : undefined);
+      } else {
+        form.submit();
+      }
+    } finally {
+      delete form.dataset.confirmed;
+    }
+  }
+
+  function askConfirm(message, note, label, form, submitter) {
+    if (!confirmModal) {
+      // Sem o bundle do Bootstrap: cai no diálogo nativo, mas ainda confirma.
+      if (window.confirm(note ? message + '\n\n' + note : message)) {
+        submitConfirmed(form, submitter);
+      }
+      return;
+    }
+
+    document.getElementById('confirm-modal-message').textContent = message;
+
+    var noteEl = document.getElementById('confirm-modal-note');
+    if (note) {
+      noteEl.textContent = note;
+      noteEl.classList.remove('d-none');
+    } else {
+      noteEl.textContent = '';
+      noteEl.classList.add('d-none');
+    }
+
+    var okButton = document.getElementById('confirm-modal-ok');
+    okButton.textContent = '';
+    var icon = document.createElement('i');
+    icon.className = 'bi bi-check2 me-1';
+    okButton.appendChild(icon);
+    okButton.appendChild(document.createTextNode(label));
+
+    confirmState.form = form;
+    confirmState.submitter = submitter;
+    confirmModal.show();
+
+    // Foco no "Cancelar": a ação destrutiva nunca é a padrão.
+    confirmEl.addEventListener(
+      'shown.bs.modal',
+      function () {
+        var cancel = document.getElementById('confirm-modal-cancel');
+        if (cancel) cancel.focus();
+      },
+      { once: true }
+    );
+  }
+
+  if (confirmEl) {
+    document.getElementById('confirm-modal-ok').addEventListener('click', function () {
+      var state = confirmState;
+      confirmState = { form: null, submitter: null };
+      confirmModal.hide();
+      submitConfirmed(state.form, state.submitter);
+    });
+  }
+
   document.addEventListener(
     'submit',
     function (event) {
       var form = event.target;
       if (!form || form.tagName !== 'FORM') return;
-      var message = (event.submitter && event.submitter.dataset && event.submitter.dataset.confirm) || form.dataset.confirm;
-      if (message && !window.confirm(message)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
+      if (form.dataset.confirmed === '1') return; // já confirmado no modal
+
+      var submitter = event.submitter && form.contains(event.submitter) ? event.submitter : null;
+      // Os atributos podem estar no formulário ou no botão que enviou; o botão
+      // vence. (Um dataset vazio é "truthy", então nada de escolher um só.)
+      var buttonData = (submitter && submitter.dataset) || {};
+      var formData = form.dataset;
+      var message = buttonData.confirm || formData.confirm;
+      if (!message) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      askConfirm(
+        message,
+        buttonData.confirmNote || formData.confirmNote || '',
+        buttonData.confirmLabel || formData.confirmLabel || 'Confirmar',
+        form,
+        submitter
+      );
     },
     true
   );
@@ -118,8 +208,8 @@
   function patchRow(row, task) {
     if (!row) return;
     var closed = task.status === 'done' || task.status === 'cancelled';
+    // Estado exato (atrasada, contadores, seções) vem da região viva logo depois.
     row.classList.toggle('is-done', closed);
-    row.classList.toggle('is-overdue', task.status === 'open' && row.dataset.overdue === '1');
     var symbol = row.querySelector('.bujo-symbol');
     if (symbol) {
       symbol.className = symbolClasses(task);
@@ -133,35 +223,84 @@
     }
   }
 
-  document.querySelectorAll('form.js-toggle-task').forEach(function (form) {
-    form.addEventListener('submit', function (event) {
-      if (form.dataset.ajax === 'off') return;
-      event.preventDefault();
-      var row = form.closest('[data-task-id]');
-      var button = form.querySelector('button[type="submit"]');
-      if (button) button.disabled = true;
+  /* ------------------------------------------------------------------
+   * Regiões vivas: depois de concluir/reabrir uma tarefa, o servidor é
+   * consultado de novo e só os blocos marcados com data-live-region são
+   * substituídos (contadores, barra de progresso, listas Hoje/Concluídas).
+   * Assim nada fica desatualizado esperando um F5, e o formulário rápido
+   * — que fica fora das regiões — não perde o que foi digitado.
+   * ------------------------------------------------------------------ */
+  var refreshRunning = false;
+  var refreshQueued = false;
 
-      fetch(form.action, {
-        method: 'POST',
-        body: new FormData(form),
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF, Accept: 'application/json' },
-        credentials: 'same-origin'
+  function refreshLiveRegions() {
+    var regions = Array.prototype.slice.call(document.querySelectorAll('[data-live-region]'));
+    if (!regions.length) return;
+    if (refreshRunning) {
+      refreshQueued = true;
+      return;
+    }
+    refreshRunning = true;
+
+    fetch(window.location.href, { headers: { Accept: 'text/html' }, credentials: 'same-origin' })
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.text();
       })
-        .then(function (response) {
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          return response.json();
-        })
-        .then(function (data) {
-          if (data && data.task) patchRow(row, data.task);
-        })
-        .catch(function () {
-          form.dataset.ajax = 'off';
-          form.submit();
-        })
-        .finally(function () {
-          if (button) button.disabled = false;
+      .then(function (html) {
+        var fresh = new DOMParser().parseFromString(html, 'text/html');
+        regions.forEach(function (region) {
+          var key = region.getAttribute('data-live-region');
+          var updated = fresh.querySelector('[data-live-region="' + key + '"]');
+          if (updated) region.innerHTML = updated.innerHTML;
         });
-    });
+      })
+      .catch(function () {
+        /* Sem alarde: se falhar, um F5 mostra o estado correto. */
+      })
+      .finally(function () {
+        refreshRunning = false;
+        if (refreshQueued) {
+          refreshQueued = false;
+          refreshLiveRegions();
+        }
+      });
+  }
+
+  /* Delegação: os formulários que chegam junto com uma região atualizada
+     continuam funcionando sem precisar re-registrar listeners. */
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.classList || !form.classList.contains('js-toggle-task')) return;
+    if (form.dataset.ajax === 'off') return;
+
+    event.preventDefault();
+    var row = form.closest('[data-task-id]');
+    var button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+
+    fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF, Accept: 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function (data) {
+        // Risca na hora (resposta imediata) e em seguida acerta as seções.
+        if (data && data.task) patchRow(row, data.task);
+        refreshLiveRegions();
+      })
+      .catch(function () {
+        form.dataset.ajax = 'off';
+        form.submit();
+      })
+      .finally(function () {
+        if (button) button.disabled = false;
+      });
   });
 
   /* ------------------------------------------------------------------

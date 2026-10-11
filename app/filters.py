@@ -6,7 +6,7 @@ import json
 
 from markupsafe import Markup, escape
 
-from . import utils
+from . import markdown_notes, utils
 
 
 def register_filters(app) -> None:
@@ -17,6 +17,10 @@ def register_filters(app) -> None:
     app.jinja_env.filters["month_pt"] = utils.month_label_pt
     app.jinja_env.filters["tojson_pretty"] = lambda value: json.dumps(value, ensure_ascii=False, indent=2)
     app.jinja_env.filters["nl2br"] = _nl2br
+    # Anotações: Markdown renderizado e sanitizado (e um resumo em texto puro).
+    app.jinja_env.filters["markdown"] = markdown_notes.render_cached
+    app.jinja_env.filters["note_preview"] = markdown_notes.para_texto
+    app.jinja_env.filters["has_notes"] = markdown_notes.tem_conteudo
 
 
 def _nl2br(value) -> Markup:

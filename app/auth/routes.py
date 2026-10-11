@@ -173,7 +173,6 @@ def _profile_stats() -> dict:
     stats = Task.stats(current_user)
     recent = Task.for_user(current_user).order_by(Task.updated_at.desc()).limit(5).all()
     stats["recent"] = recent
-    stats["collections"] = Task.collections(current_user)
     return stats
 
 

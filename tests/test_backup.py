@@ -57,7 +57,7 @@ def test_import_merge_restores_deleted_tasks(auth_client, app, user, sample_task
     assert response.status_code == 200
     assert b"restaurado" in response.data.lower()
     assert Task.for_user(user).count() == len(sample_tasks)
-    assert Task.for_user(user).filter_by(title="Tarefa de hoje").one().collection == "Trabalho"
+    assert Task.for_user(user).filter_by(title="Tarefa de hoje").one().priority == "high"
 
 
 def test_import_is_idempotent(auth_client, app, user, sample_tasks):

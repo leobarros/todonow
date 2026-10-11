@@ -1,8 +1,7 @@
-"""Task CRUD, completion, migration and bulk-action routes."""
+"""Task CRUD, completion, migration and reschedule routes."""
 
 from __future__ import annotations
 
-import contextlib
 from datetime import timedelta
 
 from flask import (
@@ -16,6 +15,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
+from .. import markdown_notes
 from ..extensions import db
 from ..models import Task
 from ..utils import (
@@ -31,16 +31,7 @@ from ..utils import (
     today_local,
 )
 from . import bp
-from .forms import FilterForm, QuickTaskForm, TaskForm
-
-BULK_ACTIONS = {
-    "complete": "Concluir selecionadas",
-    "reopen": "Reabrir selecionadas",
-    "cancel": "Cancelar selecionadas",
-    "migrate_tomorrow": "Migrar para amanhã",
-    "migrate_week": "Migrar para a próxima semana",
-    "delete": "Excluir selecionadas",
-}
+from .forms import QuickTaskForm, TaskForm
 
 
 def _wants_json() -> bool:
@@ -60,18 +51,6 @@ def _get_task(task_id: int) -> Task:
     return task
 
 
-def _selected_ids() -> list[int]:
-    ids: list[int] = []
-    for raw in request.form.getlist("ids") or request.form.getlist("task_ids"):
-        with contextlib.suppress(TypeError, ValueError):
-            ids.append(int(raw))
-    single = request.form.get("id")
-    if single:
-        with contextlib.suppress(TypeError, ValueError):
-            ids.append(int(single))
-    return sorted(set(ids))
-
-
 # --------------------------------------------------------------------------
 # Reads
 # --------------------------------------------------------------------------
@@ -80,12 +59,10 @@ def _selected_ids() -> list[int]:
 @bp.get("/")
 @login_required
 def index():
-    form = FilterForm(request.args, meta={"csrf": False})
     query = Task.for_user(current_user)
 
     status = (request.args.get("status") or "").strip()
     kind = (request.args.get("kind") or "").strip()
-    collection = (request.args.get("collection") or "").strip()
     term = (request.args.get("q") or "").strip()
     when = (request.args.get("when") or "all").strip()
     include_done = request.args.get("include_done", "1") not in {"0", "false", "no"}
@@ -96,8 +73,6 @@ def index():
         query = query.filter(Task.status == STATUS_OPEN)
     if kind in TASK_KINDS:
         query = query.filter(Task.kind == kind)
-    if collection:
-        query = query.filter(Task.collection == collection)
     if term:
         like = f"%{term}%"
         query = query.filter(db.or_(Task.title.ilike(like), Task.notes.ilike(like)))
@@ -117,19 +92,14 @@ def index():
         page=max(page, 1), per_page=current_app_per_page(), error_out=False
     )
 
-    form.collection.choices = [("", "Todas")] + [(c, c) for c in Task.collections(current_user)]
-
     return render_template(
         "tasks/index.html",
         pagination=pagination,
         tasks=pagination.items,
-        form=form,
-        bulk_actions=BULK_ACTIONS,
         stats=Task.stats(current_user),
         filters={
             "status": status,
             "kind": kind,
-            "collection": collection,
             "q": term,
             "when": when,
             "include_done": include_done,
@@ -192,7 +162,6 @@ def quick_add():
             title=form.title.data.strip(),
             kind=form.kind.data if form.kind.data in TASK_KINDS else KIND_TASK,
             priority=form.priority.data if form.priority.data in TASK_PRIORITIES else PRIORITY_NONE,
-            collection=(form.collection.data or "").strip()[:64] or None,
             scheduled_date=form.scheduled_date.data or today_local(),
             status=STATUS_OPEN,
         )
@@ -239,7 +208,6 @@ def _apply_form(task: Task, form: TaskForm) -> None:
     task.notes = (form.notes.data or "").strip() or None
     task.kind = form.kind.data if form.kind.data in TASK_KINDS else KIND_TASK
     task.priority = form.priority.data if form.priority.data in TASK_PRIORITIES else PRIORITY_NONE
-    task.collection = (form.collection.data or "").strip()[:64] or None
     task.scheduled_date = form.scheduled_date.data or today_local()
     task.due_date = form.due_date.data
 
@@ -280,68 +248,91 @@ def delete(task_id: int):
 @bp.post("/<int:task_id>/migrate")
 @login_required
 def migrate(task_id: int):
-    """BUJO migration: carry the entry forward and mark the original with ``>``."""
+    """Adia a entrada (migração BUJO): a mesma tarefa muda de dia.
+
+    Os atalhos são **relativos à data atual da tarefa** (nunca "hoje + 1"), para
+    que adiar uma tarefa já agendada para amanhã não tente mirar o próprio dia.
+    """
     task = _get_task(task_id)
+    base = task.scheduled_date or today_local()
     target = parse_date(request.form.get("target_date"))
+
     if target is None:
-        preset = (request.form.get("preset") or "tomorrow").strip()
-        if preset == "week":
-            target = today_local() + timedelta(days=7)
-        elif preset == "month":
-            target = today_local() + timedelta(days=30)
-        elif preset == "today":
-            target = today_local()
-        else:
-            target = today_local() + timedelta(days=1)
+        preset = (request.form.get("preset") or "next_day").strip()
+        deslocamento = {"next_day": 1, "next_week": 7, "next_month": 30}.get(preset, 1)
+        target = base + timedelta(days=deslocamento)
 
-    if target == task.scheduled_date and task.is_open:
-        flash("A tarefa já está agendada para essa data.", "warning")
-        return redirect(request.form.get("next") or url_for("main.dashboard"))
+    destino = request.form.get("next") or url_for("main.dashboard")
 
-    successor = task.migrate_to(target)
+    if target <= base:
+        flash(
+            f"Para adiar, escolha uma data depois de {base.strftime('%d/%m/%Y')}.",
+            "warning",
+        )
+        return redirect(destino)
+
+    # Não cria uma gêmea: se já existe uma tarefa aberta com este nome no dia
+    # de destino, isso viraria duplicidade no mesmo dia.
+    irma = (
+        Task.for_user(current_user)
+        .filter(
+            Task.id != task.id,
+            Task.status == STATUS_OPEN,
+            Task.scheduled_date == target,
+            db.func.lower(db.func.trim(Task.title)) == task.title.strip().lower(),
+        )
+        .first()
+    )
+    if irma is not None:
+        flash(
+            f'Já existe uma tarefa aberta com este nome em {target.strftime("%d/%m/%Y")} '
+            f"(#{irma.id}). Nada foi alterado — edite, adie ou remova uma das duas.",
+            "warning",
+        )
+        return redirect(destino)
+
+    task.migrate_to(target)
     db.session.commit()
     if _wants_json():
-        return jsonify({"ok": True, "task": _task_payload(task), "successor": _task_payload(successor)})
-    flash(f"Tarefa migrada para {target.strftime('%d/%m/%Y')} (>).", "info")
-    return redirect(request.form.get("next") or url_for("main.dashboard"))
+        return jsonify({"ok": True, "task": _task_payload(task)})
+    flash(f'Tarefa adiada para {target.strftime("%d/%m/%Y")}.', "info")
+    return redirect(destino)
 
 
-@bp.post("/bulk")
+@bp.post("/<int:task_id>/notes")
 @login_required
-def bulk():
-    action = (request.form.get("action") or "").strip()
-    ids = _selected_ids()
-    if not ids:
-        flash("Nenhuma tarefa selecionada.", "warning")
-        return redirect(request.form.get("next") or url_for("tasks.index"))
-    if action not in BULK_ACTIONS:
-        flash("Ação inválida.", "danger")
-        return redirect(request.form.get("next") or url_for("tasks.index"))
+def save_notes(task_id: int):
+    """Grava as anotações da tarefa (usado pelo editor da tela de detalhe)."""
+    task = _get_task(task_id)
+    # O botão "Limpar" manda clear_notes=1; o textarea continua sendo a fonte do texto.
+    if request.form.get("clear_notes"):
+        texto = ""
+    else:
+        texto = (request.form.get("notes") or "").strip()
+    limite = 20000
+    if len(texto) > limite:
+        flash(f"As anotações passam de {limite} caracteres. Nada foi salvo.", "danger")
+    else:
+        task.notes = texto or None
+        db.session.commit()
+        flash("Anotações salvas." if texto else "Anotações removidas.", "success")
 
-    tasks = Task.for_user(current_user).filter(Task.id.in_(ids)).all()
-    count = len(tasks)
+    if _wants_json():
+        return jsonify({"ok": True, "notes": task.notes, "html": str(markdown_notes.render(task.notes))})
+    return redirect(request.form.get("next") or url_for("tasks.detail", task_id=task.id))
 
-    if action == "complete":
-        for task in tasks:
-            task.complete()
-    elif action == "reopen":
-        for task in tasks:
-            task.reopen()
-    elif action == "cancel":
-        for task in tasks:
-            task.cancel()
-    elif action in {"migrate_tomorrow", "migrate_week"}:
-        target = today_local() + timedelta(days=1 if action == "migrate_tomorrow" else 7)
-        for task in tasks:
-            if task.is_open:
-                task.migrate_to(target)
-    elif action == "delete":
-        for task in tasks:
-            db.session.delete(task)
 
-    db.session.commit()
-    flash(f"{BULK_ACTIONS[action]}: {count} tarefa(s).", "success")
-    return redirect(request.form.get("next") or url_for("tasks.index"))
+@bp.post("/notes/preview")
+@login_required
+def render_notes():
+    """Markdown → HTML sanitizado.
+
+    Serve ao editor (carregar o modo Visual a partir do Markdown salvo) e a
+    qualquer pré-visualização: é o mesmo renderizador que exibe a nota depois.
+    """
+    payload = request.get_json(silent=True) or request.form
+    texto = (payload.get("notes") or "")[:20000]
+    return jsonify({"ok": True, "html": str(markdown_notes.render(texto))})
 
 
 @bp.post("/<int:task_id>/reschedule")

@@ -31,11 +31,182 @@
         <i class="bi bi-flag me-1"></i>prazo {{ task.due_date|date_pt }} ({{ task.due_date|relative }})
       </span>
     {% endif %}
-    {% if task.migrated_to_date %}
-      <span class="ms-2 text-warning-emphasis"><i class="bi bi-arrow-right-circle me-1"></i>migrada para {{ task.migrated_to_date|date_pt }}</span>
-    {% endif %}
   </span>
 {%- endmacro %}
+
+{% macro migrate_menu(task, next_url, button_class='btn btn-sm btn-outline-secondary border-0', show_label=false) %}
+  {#- Adiar = migrar. As opções são sempre posteriores à data atual da tarefa,
+      então nunca existe "migrar para o dia em que ela já está". -#}
+  {% set base = task.scheduled_date or today() %}
+  {% set mais_um = base + timedelta(days=1) %}
+  {% set mais_sete = base + timedelta(days=7) %}
+  <div class="dropdown">
+    <button class="{{ button_class }}" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+            title="Adiar para outro dia" aria-label="Adiar tarefa">
+      <i class="bi bi-arrow-right-circle"></i>{% if show_label %}<span class="ms-1">Adiar</span>{% endif %}
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><h6 class="dropdown-header">Adiar para…</h6></li>
+      <li>
+        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="preset" value="next_day">
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <button class="dropdown-item" type="submit">
+            <i class="bi bi-sunrise me-2"></i>{{ 'Amanhã' if base == today() else '+1 dia' }}
+            <span class="text-body-secondary small ms-1">{{ mais_um|date_pt }}</span>
+          </button>
+        </form>
+      </li>
+      <li>
+        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="preset" value="next_week">
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <button class="dropdown-item" type="submit">
+            <i class="bi bi-calendar-plus me-2"></i>Em 7 dias
+            <span class="text-body-secondary small ms-1">{{ mais_sete|date_pt }}</span>
+          </button>
+        </form>
+      </li>
+      <li><hr class="dropdown-divider"></li>
+      <li>
+        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}"
+              class="px-3 py-1 migrate-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <label class="form-label small mb-1" for="migrate-{{ task.id }}">Escolher data</label>
+          <input type="date" class="form-control form-control-sm mb-2" id="migrate-{{ task.id }}"
+                 name="target_date" value="{{ mais_um.isoformat() }}" min="{{ mais_um.isoformat() }}" required>
+          <button class="btn btn-sm btn-primary w-100" type="submit">Adiar</button>
+        </form>
+      </li>
+    </ul>
+  </div>
+{% endmacro %}
+
+{% macro markdown_editor(uid, render_url, value='', placeholder='Escreva aqui… use a barra acima para formatar.') %}
+  {#- Dois modos de escrita:
+      * Visual  — WYSIWYG para quem não escreve Markdown (o padrão com JS);
+      * Markdown — o texto puro, para quem prefere digitar a sintaxe.
+      O textarea é a fonte da verdade do formulário: sem JS ele aparece sozinho,
+      e no modo visual o JS converte o HTML de volta para Markdown antes de
+      enviar. A barra formata nos dois modos. -#}
+  <div class="md-editor" data-md-editor data-render-url="{{ render_url }}">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <div class="btn-group btn-group-sm md-modes" role="group" aria-label="Modo de escrita">
+        <button type="button" class="btn btn-outline-primary" data-md-mode="visual" aria-pressed="false">
+          <i class="bi bi-magic me-1"></i>Visual
+        </button>
+        <button type="button" class="btn btn-outline-primary active" data-md-mode="markdown" aria-pressed="true">
+          <i class="bi bi-markdown me-1"></i>Markdown
+        </button>
+      </div>
+      <span class="section-hint d-none d-md-inline">
+        Visual escreve por você; Markdown é para digitar a sintaxe.
+      </span>
+    </div>
+
+    <div class="md-toolbar d-flex flex-wrap gap-1 mt-2" role="toolbar"
+         aria-label="Formatação das anotações">
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="bold"
+              data-md-insert="**|**" title="Negrito (Ctrl+B)" aria-label="Negrito">
+        <i class="bi bi-type-bold"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="italic"
+              data-md-insert="*|*" title="Itálico (Ctrl+I)" aria-label="Itálico">
+        <i class="bi bi-type-italic"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="strikeThrough"
+              data-md-insert="~~|~~" title="Riscado" aria-label="Riscado">
+        <i class="bi bi-type-strikethrough"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="code"
+              data-md-insert="`|`" title="Código" aria-label="Código">
+        <i class="bi bi-code"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="h2"
+              data-md-block="## |" title="Título" aria-label="Título">
+        <i class="bi bi-type-h2"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="insertUnorderedList"
+              data-md-block="- |" title="Lista" aria-label="Lista">
+        <i class="bi bi-list-ul"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="insertOrderedList"
+              data-md-block="1. |" title="Lista numerada" aria-label="Lista numerada">
+        <i class="bi bi-list-ol"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="formatBlock:blockquote"
+              data-md-block="> |" title="Citação" aria-label="Citação">
+        <i class="bi bi-quote"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="link"
+              data-md-insert="[|](https://)" title="Link" aria-label="Link">
+        <i class="bi bi-link-45deg"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="hr"
+              data-md-block="---" title="Linha divisória" aria-label="Linha divisória">
+        <i class="bi bi-dash-lg"></i>
+      </button>
+    </div>
+
+    {#- Marcadores BUJO: o mesmo conjunto que o renderizador entende. -#}
+    <div class="md-toolbar d-flex flex-wrap gap-1 mt-2" role="toolbar"
+         aria-label="Itens de atividade (BUJO)">
+      <button type="button" class="btn btn-sm btn-outline-primary" data-md-visual="bujo: "
+              data-md-block="- [ ] |" title="Tarefa pendente" aria-label="Tarefa pendente">
+        <span class="bujo-symbol">•</span> <span class="d-none d-lg-inline">pendente</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-success" data-md-visual="bujo:x"
+              data-md-block="- [x] |" title="Tarefa concluída (riscada)" aria-label="Tarefa concluída">
+        <span class="bujo-symbol">✕</span> <span class="d-none d-lg-inline">concluída</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-md-visual="bujo:-"
+              data-md-block="- [-] |" title="Irrelevante (riscada e apagada)" aria-label="Tarefa irrelevante">
+        <span class="bujo-symbol">~</span> <span class="d-none d-lg-inline">irrelevante</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-warning" data-md-visual="bujo:>"
+              data-md-block="- [>] |" title="Migrada (rolou para outro dia)" aria-label="Tarefa migrada">
+        <span class="bujo-symbol">&gt;</span> <span class="d-none d-lg-inline">migrada</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-info" data-md-visual="bujo:<"
+              data-md-block="- [<] |" title="Agendada (marcada para o futuro)" aria-label="Tarefa agendada">
+        <span class="bujo-symbol">&lt;</span> <span class="d-none d-lg-inline">agendada</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-info" data-md-visual="bujo:o"
+              data-md-block="- [o] |" title="Evento" aria-label="Evento">
+        <span class="bujo-symbol">○</span> <span class="d-none d-lg-inline">evento</span>
+      </button>
+    </div>
+
+    <div class="md-pane md-visual-wrap mt-2" data-md-pane="visual" hidden>
+      <div class="md-visual md-body" contenteditable="true" role="textbox" aria-multiline="true"
+           spellcheck="true" data-md-area data-placeholder="{{ placeholder }}"></div>
+    </div>
+
+    <div class="md-pane mt-2" data-md-pane="markdown">
+      {{ caller() }}
+    </div>
+
+    <div class="form-text mt-1">
+      <i class="bi bi-info-circle me-1"></i>Itens BUJO: <code>- [ ]</code> pendente,
+      <code>- [x]</code> concluída (riscada), <code>- [-]</code> irrelevante,
+      <code>- [&gt;]</code> migrada, <code>[&lt;]</code> agendada, <code>- [o]</code> evento.
+      No modo Visual, os botões fazem isso por você.
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro note_badge(task) %}
+  {% if task.notes %}
+    <a class="badge rounded-pill text-bg-light border text-decoration-none note-badge"
+       href="{{ url_for('tasks.detail', task_id=task.id) }}"
+       title="{{ task.notes|note_preview(220) }}">
+      <i class="bi bi-journal-text me-1"></i>anotações
+    </a>
+  {% endif %}
+{% endmacro %}
 
 {% macro task_row(task, next_url=None, show_start=True, show_actions=True) %}
   {% set next_url = next_url or request.full_path %}
@@ -44,7 +215,10 @@
     <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}" class="task-toggle js-toggle-task">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="next" value="{{ next_url }}">
-      <button type="submit" class="bujo-check" aria-label="{{ 'Reabrir' if task.is_done else 'Concluir' }} tarefa" title="{{ 'Reabrir' if task.is_done else 'Marcar como concluída' }}">
+      <button type="submit" class="bujo-check"
+              aria-pressed="{{ 'true' if task.is_done else 'false' }}"
+              aria-label="{{ 'Reabrir a tarefa' if task.is_done else 'Concluir a tarefa' }}"
+              title="{{ 'Clique para reabrir' if task.is_done else 'Clique para concluir' }}">
         {{ bujo_symbol(task) }}
       </button>
     </form>
@@ -57,22 +231,22 @@
 
       <div class="task-meta">
         {{ kind_badge(task) }}
+        {{ note_badge(task) }}
         {{ priority_badge(task) }}
-        {% if task.collection %}
-          <a class="badge rounded-pill text-bg-secondary text-decoration-none badge-collection"
-             href="{{ url_for('tasks.index', collection=task.collection) }}">
-            <i class="bi bi-tag me-1"></i>{{ task.collection }}
-          </a>
-        {% endif %}
         <span class="ms-1">{{ task_dates(task, show_start) }}</span>
         {% if task.is_future %}<span class="badge text-bg-info-subtle border ms-1">futura</span>{% endif %}
         {% if task.is_overdue() and task.is_open %}<span class="badge text-bg-danger ms-1">atrasada</span>{% endif %}
-        {% if task.is_migrated %}<span class="badge text-bg-warning ms-1">migrada</span>{% endif %}
+        {% if task.was_migrated %}
+          <span class="badge text-bg-warning-subtle border ms-1"
+                title="Esta entrada já rolou de dia {{ task.migration_count }}x — não é conclusão">
+            <i class="bi bi-arrow-right-circle me-1"></i>migrada{% if task.migration_count > 1 %} {{ task.migration_count }}x{% endif %}
+          </span>
+        {% endif %}
         {% if task.is_cancelled %}<span class="badge text-bg-secondary ms-1">cancelada</span>{% endif %}
       </div>
 
       {% if task.notes %}
-        <div class="task-notes small">{{ task.notes|truncate(280) }}</div>
+        <div class="task-notes md-body md-compact">{{ task.notes|markdown }}</div>
       {% endif %}
     </div>
 
@@ -81,46 +255,14 @@
       <a class="btn btn-sm btn-outline-secondary border-0" href="{{ url_for('tasks.edit', task_id=task.id, next=next_url) }}"
          title="Editar" aria-label="Editar"><i class="bi bi-pencil"></i></a>
 
-      {% if not task.is_closed %}
-      <div class="dropdown">
-        <button class="btn btn-sm btn-outline-secondary border-0" type="button" data-bs-toggle="dropdown"
-                aria-expanded="false" title="Migrar (BUJO &gt;)" aria-label="Migrar">
-          <i class="bi bi-arrow-right-circle"></i>
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><h6 class="dropdown-header">Migrar para…</h6></li>
-          <li>
-            <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="preset" value="tomorrow">
-              <input type="hidden" name="next" value="{{ next_url }}">
-              <button class="dropdown-item" type="submit"><i class="bi bi-sunrise me-2"></i>Amanhã</button>
-            </form>
-          </li>
-          <li>
-            <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="preset" value="week">
-              <input type="hidden" name="next" value="{{ next_url }}">
-              <button class="dropdown-item" type="submit"><i class="bi bi-calendar-plus me-2"></i>Em 7 dias</button>
-            </form>
-          </li>
-          <li><hr class="dropdown-divider"></li>
-          <li>
-            <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}" class="px-3 py-1 migrate-form">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="next" value="{{ next_url }}">
-              <label class="form-label small mb-1" for="migrate-{{ task.id }}">Escolher data</label>
-              <input type="date" class="form-control form-control-sm mb-2" id="migrate-{{ task.id }}" name="target_date"
-                     value="{{ (today() + timedelta(days=1)).isoformat() }}" required>
-              <button class="btn btn-sm btn-primary w-100" type="submit">Migrar</button>
-            </form>
-          </li>
-        </ul>
-      </div>
+      {% if task.is_open %}
+        {{ migrate_menu(task, next_url) }}
       {% endif %}
 
-      <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}" data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;?">
+      <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}"
+            data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;?"
+            data-confirm-label="Sim, remover"
+            data-confirm-note="A tarefa será apagada permanentemente.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="next" value="{{ next_url }}">
         <button class="btn btn-sm btn-outline-danger border-0" type="submit" title="Remover" aria-label="Remover">
@@ -166,41 +308,49 @@
   </div>
 {% endmacro %}
 
-{% macro quick_add_form(form, action_url, next_url, compact=false) %}
-  <form method="post" action="{{ action_url }}" class="quick-add bujo-card">
+{% macro quick_add_form(form, action_url, next_url, sidebar=false, card=true) %}
+  {#- sidebar=true: para formulários dentro de barras laterais que só ficam
+      estreitas a partir de xl (ex.: a coluna de 3 do calendário). Nessas telas
+      os campos empilham (col-xl-12/6); abaixo de xl, onde a coluna ocupa a
+      largura toda, vale o layout horizontal de uma linha só. -#}
+  {% set w_title = 'col-12 col-lg-5 col-xl-12' if sidebar else 'col-12 col-lg-5' %}
+  {% set w_kind = 'col-6 col-lg-2 col-xl-6' if sidebar else 'col-6 col-lg-2' %}
+  {% set w_priority = 'col-6 col-lg-2 col-xl-6' if sidebar else 'col-6 col-lg-2' %}
+  {% set w_date = 'col-6 col-lg-2 col-xl-12' if sidebar else 'col-6 col-lg-2' %}
+  {% set w_button = 'col-6 col-lg-1 col-xl-12' if sidebar else 'col-6 col-lg-1' %}
+  <form method="post" action="{{ action_url }}"
+        class="quick-add{{ ' bujo-card p-3 p-md-4' if card else '' }}{{ ' quick-add-sidebar' if sidebar else '' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ next_url }}">
-    <div class="row g-2 align-items-end">
-      <div class="col-12 col-lg-5">
+    <div class="row g-2 g-md-3 align-items-end">
+      <div class="{{ w_title }}">
         <label class="form-label small mb-1" for="qa-title">O que precisa ser feito?</label>
         <div class="input-group">
           <span class="input-group-text bg-transparent"><i class="bi bi-plus-lg"></i></span>
-          {{ form.title(class="form-control", id="qa-title", required=True, maxlength="255") }}
+          {{ form.title(class="form-control", id="qa-title", required=True, maxlength="255",
+                        placeholder="Adicionar tarefa…") }}
         </div>
       </div>
-      <div class="col-6 col-lg-2">
+      <div class="{{ w_kind }}">
         <label class="form-label small mb-1" for="qa-kind">Tipo</label>
         {{ form.kind(class="form-select", id="qa-kind") }}
       </div>
-      <div class="col-6 col-lg-2">
+      <div class="{{ w_priority }}">
         <label class="form-label small mb-1" for="qa-priority">Prioridade</label>
         {{ form.priority(class="form-select", id="qa-priority") }}
       </div>
-      <div class="col-6 col-lg-2">
+      <div class="{{ w_date }}">
         <label class="form-label small mb-1" for="qa-date">Data</label>
         {{ form.scheduled_date(class="form-control", id="qa-date", type="date") }}
       </div>
-      <div class="col-6 col-lg-1 d-grid">
-        <button class="btn btn-primary" type="submit" title="Adicionar"><i class="bi bi-plus-lg"></i></button>
+      <div class="{{ w_button }} d-grid">
+        <button class="btn btn-primary" type="submit" title="Adicionar" aria-label="Adicionar tarefa">
+          <i class="bi bi-plus-lg"></i>
+          {%- if sidebar %}<span class="d-none d-xl-inline ms-1">Adicionar</span>{% endif %}
+        </button>
       </div>
-      {% if not compact %}
-      <div class="col-12">
-        <label class="form-label small mb-1" for="qa-collection">Coleção (opcional)</label>
-        {{ form.collection(class="form-control", id="qa-collection", maxlength="64", placeholder="Ex.: Trabalho, Infra, Pessoal") }}
-      </div>
-      {% endif %}
     </div>
-    <div class="form-text mt-2">
+    <div class="form-text mt-2 mt-md-3 mb-0">
       <i class="bi bi-info-circle me-1"></i>Sem data escolhida a tarefa começa <strong>hoje</strong>; escolha uma data futura para agendá-la.
     </div>
   </form>
@@ -213,34 +363,17 @@
   </div>
 {% endmacro %}
 
-{# Bulk action bar: hidden ids + submit buttons carrying the action value. #}
-{% macro bulk_bar(ids, next_url, actions) %}
-  {% if ids %}
-    <form method="post" action="{{ url_for('tasks.bulk') }}" class="bulk-bar d-flex flex-wrap align-items-center gap-2"
-          data-confirm="Aplicar a ação selecionada?">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="next" value="{{ next_url }}">
-      {% for task_id in ids %}
-        <input type="hidden" name="ids" value="{{ task_id }}">
-      {% endfor %}
-      <span class="text-body-secondary small me-1"><i class="bi bi-check2-square me-1"></i>{{ ids|length }} entrada(s):</span>
-      {% for value, label, icon, css in actions %}
-        <button type="submit" name="action" value="{{ value }}" class="btn btn-sm {{ css }}">
-          <i class="bi {{ icon }} me-1"></i>{{ label }}
-        </button>
-      {% endfor %}
-    </form>
-  {% endif %}
-{% endmacro %}
-
-{% macro section_header(title, icon, count=None, tone='primary') %}
+{% macro section_header(title, icon, count=None, tone='primary', hint=None) %}
   <div class="section-header d-flex align-items-center justify-content-between mt-4 mb-2">
     <h2 class="h6 mb-0 text-uppercase letter-spaced text-{{ tone }}">
       <i class="bi {{ icon }} me-2"></i>{{ title }}
     </h2>
-    {% if count is not none %}
-      <span class="badge rounded-pill text-bg-{{ tone }}">{{ count }}</span>
-    {% endif %}
+    <div class="d-flex align-items-center gap-2">
+      {% if hint %}<span class="section-hint d-none d-sm-inline">{{ hint }}</span>{% endif %}
+      {% if count is not none %}
+        <span class="badge rounded-pill text-bg-{{ tone }}">{{ count }}</span>
+      {% endif %}
+    </div>
   </div>
 {% endmacro %}
 

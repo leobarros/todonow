@@ -72,6 +72,8 @@ body.bujo-body {
   color: var(--bs-primary);
 }
 
+.bujo-check .bujo-symbol { font-size: 1em; }
+
 .bujo-symbol-done { color: var(--bs-success); }
 .bujo-symbol-migrated { color: var(--bs-warning); }
 .bujo-symbol-cancelled { color: var(--bs-secondary); }
@@ -110,16 +112,86 @@ body.bujo-body {
 .task-row.is-overdue { border-left-color: var(--bs-danger); }
 .task-row.is-done { border-left-color: var(--bs-success); opacity: .82; }
 
+/* Alvo de conclusão: um anel circular em volta do símbolo BUJO.
+   Antes era só o glifo, sem área de clique visível — ninguém descobria que
+   dava para concluir ali. O anel, o realce no hover e o anel de foco deixam a
+   ação evidente sem gritar. */
 .bujo-check {
-  background: none;
-  border: 0;
-  padding: 0 .15rem;
-  font-size: 1.15rem;
-  line-height: 1.4;
+  --bujo-target: 2.35rem;
+  /* Anel visível em repouso (a borda padrão do Bootstrap some no fundo). */
+  --bujo-ring: color-mix(in srgb, var(--bs-body-color) 32%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--bujo-target);
+  height: var(--bujo-target);
+  padding: 0;
+  border: 2px solid var(--bujo-ring);
+  border-radius: 50%;
+  background: var(--bs-body-bg);
+  font-size: 1.05rem;
+  line-height: 1;
   cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, background-color .12s ease, box-shadow .12s ease;
 }
 
-.bujo-check-lg { font-size: 1.8rem; }
+/* A linha toda convida ao clique; o anel responde junto. */
+.task-row:hover .bujo-check,
+.task-row:focus-within .bujo-check {
+  border-color: var(--bs-success);
+  background: var(--bs-success-bg-subtle);
+}
+
+.bujo-check:hover {
+  transform: scale(1.09);
+  box-shadow: 0 0 0 .22rem rgba(var(--bs-success-rgb), .18);
+}
+
+.bujo-check:active { transform: scale(.95); }
+
+.bujo-check:focus-visible {
+  outline: 0;
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 .25rem rgba(var(--bs-primary-rgb), .35);
+}
+
+/* Estados: o anel acompanha a situação da entrada. */
+.task-row.is-done .bujo-check {
+  --bujo-ring: var(--bs-success);
+  background: var(--bs-success-bg-subtle);
+}
+
+.task-row.is-overdue .bujo-check { --bujo-ring: var(--bs-danger); }
+
+/* O anel cresce um pouco junto com a linha, mesmo sem hover no alvo. */
+.task-row:hover .bujo-check,
+.task-row:focus-within .bujo-check { transform: scale(1.04); }
+
+.task-row.is-done:hover .bujo-check {
+  border-color: var(--bs-secondary);
+  background: var(--bs-secondary-bg-subtle);
+}
+
+.task-row.is-done:hover .bujo-check::after {
+  /* deixa claro que clicar de novo reabre */
+  content: "↺";
+}
+
+.task-row.is-done:hover .bujo-check .bujo-symbol { display: none; }
+
+/* Já concluída: o hover sugere reabrir, então o anel perde o verde. */
+.bujo-check-lg { --bujo-target: 3.1rem; font-size: 1.65rem; }
+
+.task-list-compact .bujo-check {
+  --bujo-target: 1.75rem;
+  font-size: .82rem;
+  border-width: 1.5px;
+}
+
+@media (max-width: 576px) {
+  .bujo-check { --bujo-target: 2.6rem; }  /* alvo confortável no toque */
+}
 
 .task-body { flex: 1 1 auto; min-width: 0; }
 
@@ -288,3 +360,164 @@ hr + .task-notes { margin-top: .5rem; }
 .auth-tabs .nav-link:hover:not(.disabled) { background: var(--bs-secondary-bg); }
 .auth-tabs .nav-link.active { background: var(--bs-primary); color: #fff; }
 .auth-tabs .nav-link.disabled { opacity: .45; }
+
+/* ---------- formulário rápido em barra lateral ----------
+   Empilhado apenas a partir de xl, quando a coluna de 3 fica estreita. */
+@media (min-width: 1200px) {
+  .quick-add-sidebar .form-label { font-size: .76rem; margin-bottom: .15rem; }
+  .quick-add-sidebar .input-group-text { padding-inline: .5rem; }
+  .quick-add-sidebar .form-select,
+  .quick-add-sidebar .form-control { font-size: .875rem; }
+  .quick-add-sidebar .form-text { font-size: .72rem; line-height: 1.35; }
+}
+
+/* ---------- modal de confirmação ---------- */
+#confirm-modal .modal-content {
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bujo-radius);
+  box-shadow: var(--bujo-shadow);
+}
+
+#confirm-modal .modal-header,
+#confirm-modal .modal-footer { border-color: var(--bs-border-color); }
+
+#confirm-modal .modal-header .bi-exclamation-triangle-fill { color: var(--bs-warning) !important; }
+
+#confirm-modal #confirm-modal-message {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+#confirm-modal .modal-footer .btn-warning { font-weight: 600; }
+
+/* Dica de ação nas seções — memória de trabalho, não decoração. */
+.section-hint {
+  font-size: .74rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+
+/* ---------- anotações em Markdown ---------- */
+.md-body { line-height: 1.55; overflow-wrap: anywhere; }
+.md-body > :last-child { margin-bottom: 0; }
+.md-body p { margin-bottom: .6rem; }
+.md-body h1, .md-body h2, .md-body h3,
+.md-body h4, .md-body h5, .md-body h6 {
+  font-size: 1.02rem;
+  font-weight: 700;
+  margin: 1rem 0 .4rem;
+  color: var(--bs-body-color);
+}
+.md-body ul, .md-body ol { margin: 0 0 .7rem; padding-left: 1.4rem; }
+.md-body li { margin-bottom: .18rem; }
+/* Itens de atividade no estilo BUJO: símbolo + riscado (sem checkbox). */
+.md-body li.bujo-item { list-style: none; margin-left: -1.2rem; }
+.md-body .bujo-symbol {
+  display: inline-block;
+  width: 1.05rem;
+  font-weight: 700;
+  color: var(--bs-primary);
+}
+.md-body li.bujo-done .bujo-symbol { color: var(--bs-success); }
+.md-body li.bujo-irrelevant .bujo-symbol { color: var(--bs-secondary); }
+.md-body li.bujo-migrated .bujo-symbol { color: var(--bs-warning); }
+.md-body li.bujo-scheduled .bujo-symbol,
+.md-body li.bujo-event .bujo-symbol { color: var(--bs-info); }
+
+.md-body li.is-struck .bujo-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+.md-body li.bujo-done .bujo-text {
+  text-decoration-color: var(--bs-success);
+  color: var(--bs-secondary-color);
+}
+.md-body li.bujo-irrelevant .bujo-text {
+  text-decoration-color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
+  opacity: .75;
+}
+.md-body blockquote {
+  border-left: 3px solid var(--bs-primary);
+  background: var(--bs-tertiary-bg);
+  border-radius: 0 var(--bujo-radius) var(--bujo-radius) 0;
+  padding: .5rem .8rem;
+  margin: 0 0 .7rem;
+  color: var(--bs-secondary-color);
+}
+.md-body code {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 6px;
+  padding: .08rem .34rem;
+  font-size: .86em;
+}
+.md-body pre {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 10px;
+  padding: .7rem .85rem;
+  overflow-x: auto;
+}
+.md-body pre code { background: none; border: 0; padding: 0; }
+.md-body table { width: 100%; margin-bottom: .8rem; border-collapse: collapse; }
+.md-body th, .md-body td { border: 1px solid var(--bs-border-color); padding: .35rem .55rem; }
+.md-body th { background: var(--bs-tertiary-bg); }
+.md-body hr { border-color: var(--bs-border-color); opacity: .6; }
+.md-body a { text-decoration: underline; }
+
+.note-badge { font-weight: 500; }
+.note-badge:hover { background: var(--bs-primary-bg-subtle) !important; }
+
+/* ---------- editor de anotações ---------- */
+.md-editor .md-toolbar .btn { border-radius: 8px !important; }
+.md-editor .md-toolbar { gap: .15rem; }
+.md-editor .md-tabs { gap: .25rem; }
+.md-editor .md-tabs .nav-link {
+  padding: .2rem .7rem;
+  font-size: .82rem;
+  border-radius: 999px;
+  color: var(--bs-body-color);
+}
+.md-editor .md-tabs .nav-link.active { background: var(--bs-primary); color: #fff; }
+.md-editor textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9rem;
+  border-radius: 10px;
+}
+
+
+/* ---------- resumo das anotações na linha da tarefa ---------- */
+.task-notes.md-body {
+  font-size: .82rem;
+  color: var(--bs-secondary-color);
+  max-height: 5.4rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 74%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 74%, transparent 100%);
+}
+.md-compact { font-size: .82rem; }
+.md-compact h1, .md-compact h2, .md-compact h3,
+.md-compact h4, .md-compact h5, .md-compact h6 { font-size: .86rem; margin: .35rem 0 .2rem; }
+.md-compact p, .md-compact ul, .md-compact ol { margin-bottom: .3rem; }
+.md-compact pre, .md-compact table { font-size: .78rem; }
+
+/* ---------- editor: modos visual e markdown ---------- */
+.md-editor .md-modes { gap: .2rem; }
+.md-editor .md-modes .btn.active { background: var(--bs-primary); color: #fff; border-color: var(--bs-primary); }
+.md-visual {
+  min-height: 9rem;
+  padding: .75rem .9rem;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 10px;
+  outline: 0;
+}
+.md-visual:focus { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .2); }
+.md-visual:empty::before { content: attr(data-placeholder); color: var(--bs-secondary-color); }
+.md-editor .md-pane[hidden] { display: none; }
+
+/* Barra do editor: chips soltos (btn-group não lida com quebra de linha). */
+.md-toolbar { row-gap: .25rem; }
+.md-editor .md-toolbar .btn { border-radius: 8px; padding: .3rem .55rem; }
+.md-toolbar .bujo-symbol { font-size: .95rem; }
