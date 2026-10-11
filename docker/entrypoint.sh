@@ -4,7 +4,7 @@
 set -eu
 
 DATA_DIR="${DATA_DIR:-/data}"
-PORT="${PORT:-8000}"
+PORT="${PORT:-8081}"
 export DATA_DIR
 
 mkdir -p "${DATA_DIR}/backups"

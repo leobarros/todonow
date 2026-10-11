@@ -14,7 +14,7 @@ services:
       - run
       - --debug
       - --host=0.0.0.0
-      - --port=${TODONOW_CONTAINER_PORT:-8000}
+      - --port=${TODONOW_CONTAINER_PORT:-8081}
     environment:
       FLASK_ENV: development
       FLASK_DEBUG: "1"
@@ -25,7 +25,7 @@ services:
       - todonow-dev-data:/data
     mem_limit: 512m
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${TODONOW_CONTAINER_PORT:-8000}/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${TODONOW_CONTAINER_PORT:-8081}/healthz"]
       interval: 15s
       timeout: 5s
       retries: 5

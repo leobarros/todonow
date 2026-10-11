@@ -82,10 +82,9 @@ docker compose logs -f
 
 Acesse **http://localhost:8081** (ou `http://IP-DO-HOMELAB:8081`).
 
-> A porta do host é a `TODONOW_PORT` (padrão **8081**, já que 8000 costuma estar
-> ocupada por Portainer e afins). Para trocar: mude no `.env` e rode
-> `docker compose up -d`. A porta interna do container segue em 8000 e só muda
-> com `TODONOW_CONTAINER_PORT`.
+> A porta do host é a `TODONOW_PORT` (padrão **8081**, escolhida por ser pouco
+> disputada em homelab). Para trocar: mude no `.env` e rode
+> `docker compose up -d`. A porta interna também é 8081 (`TODONOW_CONTAINER_PORT`).
 
 Com o Makefile fica ainda mais curto:
 
@@ -478,7 +477,7 @@ Formato do arquivo:
 | `TODONOW_IMAGE` | `nickolback/todonow:latest` | Imagem usada pelo compose |
 | `TODONOW_PULL_POLICY` | `always` | `always` confere a `latest` a cada `up`; `missing` usa a imagem local |
 | `TODONOW_PORT` | `8081` | Porta publicada no host |
-| `TODONOW_CONTAINER_PORT` | `8000` | Porta interna do container (gunicorn) |
+| `TODONOW_CONTAINER_PORT` | `8081` | Porta interna do container (gunicorn) |
 | `TODONOW_BIND` | `0.0.0.0` | Interface onde publicar (`127.0.0.1`, IP do tailnet, …) |
 | `TRUST_PROXY` | `false` | Confia em `X-Forwarded-Proto/Host` (Tailscale Serve, Caddy, Nginx) |
 | `TRUST_PROXY_HOPS` | `1` | Quantos proxies confiar |
@@ -522,7 +521,7 @@ Se você tiver poucos usuários, dá para reduzir ainda mais com
 
 ```bash
 make install     # cria .venv e instala requirements-dev.txt
-make run         # Flask em modo debug em http://127.0.0.1:8000 (local, sem Docker)
+make run         # Flask em modo debug em http://127.0.0.1:8081 (local, sem Docker)
 make test        # pytest
 make lint        # ruff
 make migrate MSG="nova coluna"
@@ -626,7 +625,7 @@ autocadastro, use `ALLOW_REGISTRATION=yes` no `.env` e rode
 `docker compose up -d`. Para criar contas manualmente, entre como admin em
 **Usuários**.
 
-**A porta está ocupada (8000, 5000, 3000…)**
+**A porta está ocupada por outro serviço**
 Veja quem está usando e escolha outra porta livre:
 
 ```bash
@@ -644,7 +643,8 @@ TODONOW_PORT=9090              # qualquer porta livre no host
 docker compose up -d           # recria o container com a porta nova
 ```
 
-A porta interna do container não muda (8000); só o mapeamento do host. Se você
+A porta interna acompanha `TODONOW_CONTAINER_PORT` (8081 por padrão); o `TODONOW_PORT`
+muda só o lado do host. Se você
 usa `TODONOW_BIND` (Tailscale), o endereço passa a ser `http://SEU-BIND:9090`.
 
 **Calendário vazio**

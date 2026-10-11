@@ -37,12 +37,12 @@ jobs:
 
       - name: Subir o container e checar o healthz
         run: |
-          docker run -d --name todonow-ci -p 8000:8000 \
+          docker run -d --name todonow-ci -p 8081:8081 \
             -e SECRET_KEY=ci-secret-key \
             -e TODONOW_ADMIN_USER=ci -e TODONOW_ADMIN_PASSWORD=ci-senha-123 \
             todonow:ci
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/healthz; then exit 0; fi
+            if curl -fsS http://127.0.0.1:8081/healthz; then exit 0; fi
             sleep 2
           done
           echo "healthcheck falhou"; docker logs todonow-ci; exit 1

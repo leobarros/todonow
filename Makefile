@@ -90,7 +90,7 @@ install: ## Instala as dependências localmente (venv)
 
 .PHONY: run
 run: ## Roda o app localmente (sem Docker) em modo debug
-	FLASK_ENV=development .venv/bin/flask --app wsgi run --debug --host 127.0.0.1 --port 8000
+	FLASK_ENV=development .venv/bin/flask --app wsgi run --debug --host 127.0.0.1 --port 8081
 
 .PHONY: dev
 dev: ## Sobe em modo desenvolvimento (código montado + reload)

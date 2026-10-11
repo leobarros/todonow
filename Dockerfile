@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_TIMEZONE=America/Sao_Paulo \
     GUNICORN_WORKERS=2 \
     GUNICORN_THREADS=4 \
-    PORT=8000
+    PORT=8081
 
 WORKDIR /app
 
@@ -37,7 +37,7 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin todonow \
 USER todonow
 
 VOLUME ["/data"]
-EXPOSE 8000
+EXPOSE 8081
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${PORT}/healthz" || exit 1
