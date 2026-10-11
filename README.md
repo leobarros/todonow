@@ -80,7 +80,12 @@ docker compose up -d     # confere a latest no Docker Hub, baixa se mudou e sobe
 docker compose logs -f
 ```
 
-Acesse **http://localhost:8000** (ou `http://IP-DO-HOMELAB:8000`).
+Acesse **http://localhost:8081** (ou `http://IP-DO-HOMELAB:8081`).
+
+> A porta do host é a `TODONOW_PORT` (padrão **8081**, já que 8000 costuma estar
+> ocupada por Portainer e afins). Para trocar: mude no `.env` e rode
+> `docker compose up -d`. A porta interna do container segue em 8000 e só muda
+> com `TODONOW_CONTAINER_PORT`.
 
 Com o Makefile fica ainda mais curto:
 
@@ -254,20 +259,20 @@ Há dois jeitos, e a escolha muda **uma** configuração:
 
 ### Opção A — IP do tailnet (HTTP, mais simples)
 
-Acesse direto `http://100.x.y.z:8000` (ou `http://nome-da-maquina:8000`) de
+Acesse direto `http://100.x.y.z:8081` (ou `http://nome-da-maquina:8081`) de
 qualquer dispositivo da tailnet. Nada a configurar além do Tailscale instalado.
 
 Para não expor a porta na LAN, publique só na interface do tailnet no `.env`:
 
 ```dotenv
 TODONOW_BIND=100.x.y.z     # o IP do host no tailnet
-TODONOW_PORT=8000
+TODONOW_PORT=8081
 ```
 
 ### Opção B — Tailscale Serve (HTTPS com nome e certificado)
 
 ```bash
-tailscale serve --bg 8000        # publica https://nome.tailnet.ts.net -> localhost:8000
+tailscale serve --bg 8081        # publica https://nome.tailnet.ts.net -> localhost:8081
 ```
 
 Aí o TLS termina no Tailscale, então diga isso ao app no `.env`:
@@ -472,7 +477,8 @@ Formato do arquivo:
 | `MIN_PASSWORD_LENGTH` | `8` | Tamanho mínimo de senha |
 | `TODONOW_IMAGE` | `nickolback/todonow:latest` | Imagem usada pelo compose |
 | `TODONOW_PULL_POLICY` | `always` | `always` confere a `latest` a cada `up`; `missing` usa a imagem local |
-| `TODONOW_PORT` | `8000` | Porta publicada no host |
+| `TODONOW_PORT` | `8081` | Porta publicada no host |
+| `TODONOW_CONTAINER_PORT` | `8000` | Porta interna do container (gunicorn) |
 | `TODONOW_BIND` | `0.0.0.0` | Interface onde publicar (`127.0.0.1`, IP do tailnet, …) |
 | `TRUST_PROXY` | `false` | Confia em `X-Forwarded-Proto/Host` (Tailscale Serve, Caddy, Nginx) |
 | `TRUST_PROXY_HOPS` | `1` | Quantos proxies confiar |
@@ -516,7 +522,7 @@ Se você tiver poucos usuários, dá para reduzir ainda mais com
 
 ```bash
 make install     # cria .venv e instala requirements-dev.txt
-make run         # Flask em modo debug em http://127.0.0.1:8000
+make run         # Flask em modo debug em http://127.0.0.1:8000 (local, sem Docker)
 make test        # pytest
 make lint        # ruff
 make migrate MSG="nova coluna"
@@ -620,8 +626,26 @@ autocadastro, use `ALLOW_REGISTRATION=yes` no `.env` e rode
 `docker compose up -d`. Para criar contas manualmente, entre como admin em
 **Usuários**.
 
-**A porta 8000 está ocupada**
-Troque `TODONOW_PORT=8081` no `.env` e rode `docker compose up -d` de novo.
+**A porta está ocupada (8000, 5000, 3000…)**
+Veja quem está usando e escolha outra porta livre:
+
+```bash
+ss -ltnp | grep :8081          # quem está na porta (ou: sudo lsof -i :8081)
+ss -ltn  | awk '{print $4}'    # todas as portas em escuta
+```
+
+Depois ajuste no `.env` e suba de novo:
+
+```dotenv
+TODONOW_PORT=9090              # qualquer porta livre no host
+```
+
+```bash
+docker compose up -d           # recria o container com a porta nova
+```
+
+A porta interna do container não muda (8000); só o mapeamento do host. Se você
+usa `TODONOW_BIND` (Tailscale), o endereço passa a ser `http://SEU-BIND:9090`.
 
 **Calendário vazio**
 O feed carrega do mês atual para frente; confira os filtros (situação/tipo) e se

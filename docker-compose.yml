@@ -30,6 +30,8 @@ services:
       - path: .env
         required: false
     environment:
+      # Porta em que o gunicorn escuta dentro do container.
+      PORT: ${TODONOW_CONTAINER_PORT:-8000}
       # Caminho do banco/backups dentro do volume — não altere sem trocar o volume.
       DATA_DIR: /data
       BACKUP_DIR: /data/backups
@@ -44,9 +46,11 @@ services:
       BACKUP_KEEP: ${BACKUP_KEEP:-20}
 
     ports:
-      # TODONOW_BIND permite expor só numa interface — ex.: o IP do Tailscale
-      # (TODONOW_BIND=100.64.0.1) ou só localhost (127.0.0.1). Padrão: todas.
-      - "${TODONOW_BIND:-0.0.0.0}:${TODONOW_PORT:-8000}:8000"
+      # TODONOW_PORT  = porta no host (mude aqui se 8000 estiver ocupada).
+      # TODONOW_BIND  = interface onde publicar. Ex.: o IP do Tailscale
+      #                 (TODONOW_BIND=100.64.0.1) ou só localhost (127.0.0.1).
+      # A porta interna raramente precisa mudar (TODONOW_CONTAINER_PORT).
+      - "${TODONOW_BIND:-0.0.0.0}:${TODONOW_PORT:-8081}:${TODONOW_CONTAINER_PORT:-8000}"
 
     volumes:
       - todonow-data:/data
@@ -61,7 +65,7 @@ services:
     pids_limit: 256
 
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${TODONOW_CONTAINER_PORT:-8000}/healthz"]
       interval: 30s
       timeout: 5s
       start_period: 25s

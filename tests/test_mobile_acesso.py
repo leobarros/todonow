@@ -127,7 +127,8 @@ def test_env_example_documenta_o_acesso_remoto():
 
 
 def test_compose_permite_amarrar_a_interface():
+    """O bind e as portas são variáveis: dá para expor só no tailnet e trocar a porta."""
     from pathlib import Path
 
     compose = (Path(__file__).resolve().parent.parent / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "${TODONOW_BIND:-0.0.0.0}:${TODONOW_PORT:-8000}:8000" in compose
+    assert "${TODONOW_BIND:-0.0.0.0}:${TODONOW_PORT:-8081}:${TODONOW_CONTAINER_PORT:-8000}" in compose
