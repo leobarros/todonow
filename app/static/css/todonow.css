@@ -101,12 +101,25 @@ body.bujo-body {
   border: 1px solid var(--bs-border-color);
   border-left: 3px solid var(--bs-primary);
   border-radius: var(--bujo-radius);
-  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  /* position de base para o z-index abaixo; nada de transform aqui: em repouso
+     um transform criaria contexto de empilhamento e prenderia o menu de adiar
+     atrás da linha seguinte. */
+  position: relative;
+  transition: box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
 }
 
 .task-row:hover {
-  transform: translateX(2px);
+  /* Realce sem mexer na geometria: o "empurrão" de 2px fazia o hover oscilar
+     quando o menu de adiar (que sai da caixa da linha) estava aberto. */
+  border-color: color-mix(in srgb, var(--bs-primary) 45%, var(--bs-border-color));
   box-shadow: var(--bujo-shadow);
+}
+
+/* Enquanto um menu está aberto, a linha sobe acima das vizinhas — o menu passa
+   por cima do card seguinte em vez de ficar atrás dele. */
+.task-row:has(.dropdown-menu.show),
+.task-row:focus-within {
+  z-index: 5;
 }
 
 .task-row.is-overdue { border-left-color: var(--bs-danger); }

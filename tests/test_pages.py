@@ -377,3 +377,39 @@ def test_selos_usam_classes_validas_do_bootstrap(auth_client, app, user):
     assert "text-bg-warning-subtle" not in body
     assert "bg-info-subtle text-info-emphasis" in body
     assert "bg-warning-subtle text-warning-emphasis" in body
+
+
+def test_linha_da_tarefa_nao_move_no_hover(auth_client):
+    """Regressão: `transform` no hover da linha criava contexto de empilhamento
+    (o menu de adiar ficava atrás do card seguinte) e fazia o hover oscilar —
+    o menu tremia/piscava enquanto o mouse passava por ele."""
+    css = auth_client.get("/static/css/todonow.css").data.decode("utf-8")
+
+    inicio = css.index(".task-row:hover")
+    trecho = css[inicio : inicio + 400]
+    assert "transform" not in trecho.split("}")[0], "o hover da linha não pode mover a linha"
+
+    # a linha sobe acima das vizinhas enquanto o menu está aberto
+    assert ".task-row:has(.dropdown-menu.show)" in css
+    assert ".task-row:focus-within" in css
+    assert "z-index: 5" in css
+
+    # o menu do Bootstrap continua acima do conteúdo normal
+    assert "position: relative" in css
+
+
+def test_menu_de_adiar_esta_na_linha_e_nao_em_portal(auth_client, app, user):
+    """O menu fica dentro da linha (é o z-index da linha que resolve a sobreposição),
+    então o CSS precisa garantir o empilhamento — não basta o z-index do Bootstrap."""
+    from datetime import date
+
+    from app.extensions import db
+    from app.models import Task
+
+    db.session.add(Task(user_id=user.id, title="Com menu", scheduled_date=date.today()))
+    db.session.commit()
+
+    body = auth_client.get("/tasks/").data.decode("utf-8")
+    assert 'class="dropdown"' in body
+    assert "dropdown-menu dropdown-menu-end" in body
+    assert "data-bs-toggle=\"dropdown\"" in body
