@@ -220,6 +220,7 @@
       var label = task.status === 'done' ? 'Reabrir tarefa' : 'Concluir tarefa';
       button.setAttribute('aria-label', label);
       button.setAttribute('title', label);
+      button.setAttribute('aria-pressed', task.status === 'done' ? 'true' : 'false');
     }
   }
 
@@ -267,6 +268,112 @@
       });
   }
 
+  /* ------------------------------------------------------------------
+   * Apoio às ações que precisam sobreviver a uma rede instável.
+   *
+   * `enviar` tenta agora e, se não der, guarda na fila do modo offline
+   * (js/offline.js). Devolve { estado: 'enviado' | 'na-fila' | 'invalido' }.
+   * ------------------------------------------------------------------ */
+  function offlineApi() {
+    return window.TodonowOffline || null;
+  }
+
+  function enviar(form, opcoes) {
+    var api = offlineApi();
+    if (!api || !form) return Promise.resolve({ estado: 'invalido', dados: null });
+    return api.enviarOuEnfileirar(form, opcoes);
+  }
+
+  function tituloDaLinha(row) {
+    if (!row) return '';
+    var titulo = row.querySelector('.task-title');
+    return ((titulo ? titulo.textContent : '') || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  }
+
+  function estadoOtimista(row, destino) {
+    var simbolos = { task: '•', event: '○', note: '–' };
+    var kind = (row && row.getAttribute('data-task-kind')) || 'task';
+    return {
+      status: destino,
+      kind: kind,
+      bujo_symbol: destino === 'done' ? '✕' : simbolos[kind] || '•'
+    };
+  }
+
+  function somarDias(iso, dias) {
+    var partes = String(iso || '').split('-');
+    if (partes.length !== 3) return null;
+    var data = new Date(Date.UTC(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10)));
+    data.setUTCDate(data.getUTCDate() + dias);
+    return data.toISOString().slice(0, 10);
+  }
+
+  /** Mensagem passageira no topo, no mesmo estilo dos avisos do servidor. */
+  function aviso(mensagem, tom) {
+    var area = document.querySelector('.flash-stack');
+    if (!area) {
+      area = document.createElement('div');
+      area.className = 'flash-stack';
+      var principal = document.getElementById('main');
+      if (principal) principal.insertBefore(area, principal.firstChild);
+      else document.body.appendChild(area);
+    }
+    var icones = {
+      success: 'bi-check-circle',
+      danger: 'bi-exclamation-octagon',
+      warning: 'bi-exclamation-triangle',
+      info: 'bi-info-circle'
+    };
+    var caixa = document.createElement('div');
+    caixa.className = 'alert alert-' + tom + ' alert-dismissible fade show shadow-sm';
+    caixa.setAttribute('role', 'alert');
+    caixa.innerHTML = '<i class="bi ' + (icones[tom] || icones.info) + ' me-2"></i>';
+    caixa.appendChild(document.createTextNode(mensagem));
+    var fechar = document.createElement('button');
+    fechar.type = 'button';
+    fechar.className = 'btn-close';
+    fechar.setAttribute('data-bs-dismiss', 'alert');
+    fechar.setAttribute('aria-label', 'Fechar');
+    caixa.appendChild(fechar);
+    area.appendChild(caixa);
+
+    window.setTimeout(function () {
+      caixa.classList.remove('show');
+      window.setTimeout(function () {
+        caixa.remove();
+      }, 200);
+    }, tom === 'success' || tom === 'info' ? 2500 : 6000);
+  }
+
+  function limparErros(form) {
+    Array.prototype.forEach.call(form.querySelectorAll('.is-invalid'), function (campo) {
+      campo.classList.remove('is-invalid');
+    });
+    Array.prototype.forEach.call(form.querySelectorAll('.offline-erro'), function (caixa) {
+      caixa.remove();
+    });
+  }
+
+  function mostrarErros(form, erros) {
+    limparErros(form);
+    Object.keys(erros || {}).forEach(function (nome) {
+      var campo = form.querySelector('[name="' + nome + '"]');
+      var lista = erros[nome];
+      var texto = Object.prototype.toString.call(lista) === '[object Array]' ? lista.join(' ') : String(lista);
+      if (campo) {
+        campo.classList.add('is-invalid');
+        var caixa = document.createElement('div');
+        caixa.className = 'invalid-feedback d-block offline-erro';
+        caixa.textContent = texto;
+        campo.parentNode.appendChild(caixa);
+      } else {
+        aviso(texto, 'danger');
+      }
+    });
+    var primeiro = form.querySelector('.is-invalid');
+    if (primeiro) primeiro.focus();
+  }
+
   /* Delegação: os formulários que chegam junto com uma região atualizada
      continuam funcionando sem precisar re-registrar listeners. */
   document.addEventListener('submit', function (event) {
@@ -279,27 +386,167 @@
     var button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
 
-    fetch(form.action, {
-      method: 'POST',
-      body: new FormData(form),
-      headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF, Accept: 'application/json' },
-      credentials: 'same-origin'
+    // A situação vai como valor **absoluto** ("done"), nunca como inversão:
+    // dois cliques seguidos, ou um reenvio do modo offline, não podem desfazer
+    // o primeiro. O campo escondido do formulário já traz o alvo.
+    var destino = form.dataset.statusNext || (form.dataset.taskStatus === 'done' ? 'open' : 'done');
+    var url = form.dataset.statusUrl || form.action;
+
+    enviar(form, {
+      url: url,
+      kind: 'status',
+      taskId: row ? parseInt(row.getAttribute('data-task-id'), 10) : null,
+      label: (destino === 'done' ? 'Concluir: ' : 'Reabrir: ') + tituloDaLinha(row)
     })
-      .then(function (response) {
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        return response.json();
-      })
-      .then(function (data) {
-        // Risca na hora (resposta imediata) e em seguida acerta as seções.
-        if (data && data.task) patchRow(row, data.task);
+      .then(function (resultado) {
+        if (resultado.estado === 'invalido') {
+          // O servidor recusou (sessão expirada, por exemplo): deixa o envio
+          // normal do navegador mostrar a mensagem dele.
+          form.dataset.ajax = 'off';
+          form.submit();
+          return;
+        }
+        if (resultado.estado === 'na-fila') {
+          // Sem confirmação do servidor: riscamos assim mesmo, para o app
+          // responder na hora, e a barra mostra o que está pendente.
+          patchRow(row, estadoOtimista(row, destino));
+        } else if (resultado.dados && resultado.dados.task) {
+          patchRow(row, resultado.dados.task);
+        }
         refreshLiveRegions();
-      })
-      .catch(function () {
-        form.dataset.ajax = 'off';
-        form.submit();
       })
       .finally(function () {
         if (button) button.disabled = false;
+      });
+  });
+
+  /* ------------------------------------------------------------------
+   * Adicionar tarefa (formulário rápido)
+   *
+   * Online: envia e atualiza as listas sem recarregar. Sem rede (ou se a rede
+   * falhar no meio), a tarefa fica na fila do modo offline em vez de virar uma
+   * tela de erro — e o que estava digitado não se perde.
+   * ------------------------------------------------------------------ */
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.classList || !form.classList.contains('js-quick-add')) return;
+    if (form.dataset.ajax === 'off') return;
+
+    event.preventDefault();
+    var campo = form.querySelector('[name="title"]');
+    var botao = form.querySelector('button[type="submit"]');
+    if (botao) botao.disabled = true;
+
+    enviar(form, {
+      kind: 'quick-add',
+      taskId: null,
+      label: 'Nova tarefa: ' + ((campo && campo.value.trim()) || 'sem título')
+    })
+      .then(function (resultado) {
+        if (resultado.estado === 'invalido') {
+          if (resultado.dados && resultado.dados.errors) {
+            mostrarErros(form, resultado.dados.errors);
+          } else {
+            form.dataset.ajax = 'off';
+            form.submit();
+          }
+          return;
+        }
+        if (campo) campo.value = '';
+        limparErros(form);
+        if (resultado.estado === 'na-fila') {
+          aviso('Sem conexão: a tarefa ficou guardada e será criada quando a rede voltar.', 'warning');
+        } else {
+          aviso('Tarefa adicionada.', 'success');
+        }
+        refreshLiveRegions();
+      })
+      .finally(function () {
+        if (botao) botao.disabled = false;
+      });
+  });
+
+  /* ------------------------------------------------------------------
+   * Adiar (migração BUJO)
+   *
+   * A data de destino é calculada **agora** e vai junto com o pedido. Guardar
+   * "próximo dia" na fila e resolver depois daria outra data — a tarefa já
+   * teria mudado de dia quando o reenvio acontecesse.
+   * ------------------------------------------------------------------ */
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.classList || !form.classList.contains('js-migrate')) return;
+    if (form.dataset.ajax === 'off') return;
+
+    event.preventDefault();
+    var campos = {};
+    new FormData(form).forEach(function (valor, nome) {
+      if (typeof valor === 'string') campos[nome] = valor;
+    });
+    delete campos.preset;
+    if (!campos.target_date) {
+      var deslocamentos = { next_day: 1, next_week: 7, next_month: 30 };
+      var preset = new FormData(form).get('preset') || 'next_day';
+      campos.target_date = somarDias(form.dataset.migrateBase, deslocamentos[preset] || 1);
+    }
+
+    var row = form.closest('[data-task-id]');
+    var botao = form.querySelector('button[type="submit"]');
+    if (botao) botao.disabled = true;
+
+    enviar(form, {
+      kind: 'migrate',
+      taskId: row ? parseInt(row.getAttribute('data-task-id'), 10) : null,
+      label: 'Adiar: ' + tituloDaLinha(row),
+      campos: campos
+    })
+      .then(function (resultado) {
+        if (resultado.estado === 'invalido') {
+          form.dataset.ajax = 'off';
+          form.submit();
+          return;
+        }
+        aviso(resultado.estado === 'na-fila' ? 'Adiamento guardado — sai quando a rede voltar.' : 'Tarefa adiada.', 'info');
+        refreshLiveRegions();
+      })
+      .finally(function () {
+        if (botao) botao.disabled = false;
+      });
+  });
+
+  /* ------------------------------------------------------------------
+   * Remover tarefa
+   * ------------------------------------------------------------------ */
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.classList || !form.classList.contains('js-delete-task')) return;
+    if (form.dataset.ajax === 'off') return;
+
+    event.preventDefault();
+    var row = form.closest('[data-task-id]');
+    var botao = form.querySelector('button[type="submit"]');
+    if (botao) botao.disabled = true;
+
+    enviar(form, {
+      kind: 'delete',
+      taskId: row ? parseInt(row.getAttribute('data-task-id'), 10) : null,
+      label: 'Remover: ' + tituloDaLinha(row)
+    })
+      .then(function (resultado) {
+        if (resultado.estado === 'invalido') {
+          form.dataset.ajax = 'off';
+          form.submit();
+          return;
+        }
+        if (resultado.estado === 'enviado' && row) row.remove();
+        aviso(
+          resultado.estado === 'na-fila' ? 'Remoção guardada — sai quando a rede voltar.' : 'Tarefa removida.',
+          'info'
+        );
+        refreshLiveRegions();
+      })
+      .finally(function () {
+        if (botao) botao.disabled = false;
       });
   });
 
@@ -314,4 +561,10 @@
       });
     });
   }
+
+  /* O modo offline (js/offline.js) precisa destas duas para reconciliar a tela
+     depois de enviar a fila: a região viva traz o estado real do servidor. */
+  window.Todonow = window.Todonow || {};
+  window.Todonow.refreshLiveRegions = refreshLiveRegions;
+  window.Todonow.patchRow = patchRow;
 })();

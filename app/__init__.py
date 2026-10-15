@@ -171,6 +171,11 @@ def create_app(config_name: str | None = None, **overrides) -> Flask:
     _register_security_headers(app)
     _register_health(app)
 
+    # --- PWA / offline -------------------------------------------------
+    from .pwa import register_pwa
+
+    register_pwa(app)
+
     app.logger.setLevel(logging.INFO)
     return app
 

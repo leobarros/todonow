@@ -48,7 +48,11 @@
     <ul class="dropdown-menu dropdown-menu-end">
       <li><h6 class="dropdown-header">Adiar para…</h6></li>
       <li>
-        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+        {#- js-migrate: a data de destino é resolvida no clique e vai absoluta no
+            pedido. Adiar de novo é a última data escolhida, nunca "+1 dia"
+            contado duas vezes. -#}
+        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}"
+              class="js-migrate" data-offline="ajax" data-migrate-base="{{ base.isoformat() }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="preset" value="next_day">
           <input type="hidden" name="next" value="{{ next_url }}">
@@ -59,7 +63,8 @@
         </form>
       </li>
       <li>
-        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}">
+        <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}"
+              class="js-migrate" data-offline="ajax" data-migrate-base="{{ base.isoformat() }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="preset" value="next_week">
           <input type="hidden" name="next" value="{{ next_url }}">
@@ -72,7 +77,8 @@
       <li><hr class="dropdown-divider"></li>
       <li>
         <form method="post" action="{{ url_for('tasks.migrate', task_id=task.id) }}"
-              class="px-3 py-1 migrate-form">
+              class="px-3 py-1 migrate-form js-migrate" data-offline="ajax"
+              data-migrate-base="{{ base.isoformat() }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ next_url }}">
           <label class="form-label small mb-1" for="migrate-{{ task.id }}">Escolher data</label>
@@ -211,9 +217,16 @@
 {% macro task_row(task, next_url=None, show_start=True, show_actions=True) %}
   {% set next_url = next_url or request.full_path %}
   <article class="task-row bujo-card{% if task.is_strikethrough %} is-done{% endif %}{% if task.is_overdue() and task.is_open %} is-overdue{% endif %}"
-           data-task-id="{{ task.id }}" id="task-{{ task.id }}">
-    <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}" class="task-toggle js-toggle-task">
+           data-task-id="{{ task.id }}" data-task-kind="{{ task.kind }}" id="task-{{ task.id }}">
+    {#- A ação manda a situação **desejada** ("concluída"), não uma inversão:
+        clicar duas vezes, ou o reenvio do modo offline, não desfaz o primeiro.
+        Sem JS o formulário continua indo para tasks.toggle, como sempre. -#}
+    <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}"
+          class="task-toggle js-toggle-task" data-offline="ajax"
+          data-status-url="{{ url_for('tasks.set_status', task_id=task.id) }}"
+          data-status-next="{{ 'open' if task.is_done else 'done' }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="status" value="{{ 'open' if task.is_done else 'done' }}">
       <input type="hidden" name="next" value="{{ next_url }}">
       <button type="submit" class="bujo-check"
               aria-pressed="{{ 'true' if task.is_done else 'false' }}"
@@ -260,6 +273,7 @@
       {% endif %}
 
       <form method="post" action="{{ url_for('tasks.delete', task_id=task.id) }}"
+            class="js-delete-task" data-offline="ajax"
             data-confirm="Remover a tarefa &quot;{{ task.title }}&quot;?"
             data-confirm-label="Sim, remover"
             data-confirm-note="A tarefa será apagada permanentemente.">
@@ -319,7 +333,8 @@
   {% set w_date = 'col-6 col-lg-2 col-xl-12' if sidebar else 'col-6 col-lg-2' %}
   {% set w_button = 'col-6 col-lg-1 col-xl-12' if sidebar else 'col-6 col-lg-1' %}
   <form method="post" action="{{ action_url }}"
-        class="quick-add{{ ' bujo-card p-3 p-md-4' if card else '' }}{{ ' quick-add-sidebar' if sidebar else '' }}">
+        class="quick-add js-quick-add{{ ' bujo-card p-3 p-md-4' if card else '' }}{{ ' quick-add-sidebar' if sidebar else '' }}"
+        data-offline="ajax" data-draft="auto" data-draft-key="{{ action_url }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ next_url }}">
     <div class="row g-2 g-md-3 align-items-end">

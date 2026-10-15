@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="{{ (current_user.theme if current_user.is_authenticated and current_user.theme in ['light', 'dark'] else 'light') }}">
+<html lang="pt-BR"
+      {%- if current_user.is_authenticated %} data-todonow-auth="1" data-todonow-user="{{ current_user.username }}"{% endif %}
+      data-bs-theme="{{ (current_user.theme if current_user.is_authenticated and current_user.theme in ['light', 'dark'] else 'light') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -168,6 +170,8 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/offline-core.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline.js') }}"></script>
 <script src="{{ url_for('static', filename='js/todonow.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

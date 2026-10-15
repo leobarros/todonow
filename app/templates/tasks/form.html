@@ -19,7 +19,11 @@
         {{ 'Editar entrada' if task else 'Nova entrada' }}
       </h1>
 
-      <form method="post" novalidate>
+      {#- data-draft: o que foi digitado aqui é guardado aos poucos no aparelho.
+          Fechar a aba, recarregar sem querer ou perder a rede no meio do envio
+          não joga o texto fora (o rascunho é oferecido na volta).
+          Sem rede, o envio em si vai para a fila do modo offline. -#}
+      <form method="post" novalidate data-draft="auto" data-draft-key="{{ 'editar-' ~ task.id if task else 'nova' }}">
         {{ form.hidden_tag() }}
         <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
 

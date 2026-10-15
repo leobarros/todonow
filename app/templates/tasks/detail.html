@@ -17,8 +17,14 @@
     <div data-live-region="tarefa-detalhe">
     <article class="bujo-card p-4{{ ' is-done' if task.is_strikethrough else '' }}">
       <div class="d-flex align-items-start gap-3">
-        <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}" class="js-toggle-task">
+        {#- Situação absoluta (ver _macros.html): dois cliques não desfazem o
+            primeiro, e o reenvio do modo offline pode repetir sem estrago. -#}
+        <form method="post" action="{{ url_for('tasks.toggle', task_id=task.id) }}"
+              class="js-toggle-task" data-offline="ajax"
+              data-status-url="{{ url_for('tasks.set_status', task_id=task.id) }}"
+              data-status-next="{{ 'open' if task.is_done else 'done' }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="status" value="{{ 'open' if task.is_done else 'done' }}">
           <input type="hidden" name="next" value="{{ here }}">
           <button type="submit" class="bujo-check bujo-check-lg" aria-label="Alternar conclusão">
             {{ bujo_symbol(task) }}
@@ -114,7 +120,8 @@
       {% endif %}
 
       <div class="collapse {{ '' if task.notes else 'show' }} mt-3" id="notes-editor">
-        <form method="post" action="{{ url_for('tasks.save_notes', task_id=task.id) }}">
+        <form method="post" action="{{ url_for('tasks.save_notes', task_id=task.id) }}"
+              data-draft="auto" data-draft-key="anotacoes-{{ task.id }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ here }}">
           {% call markdown_editor('task-notes-inline', url_for('tasks.render_notes'), value=task.notes or '') %}

@@ -7,6 +7,7 @@ The vocabulary follows the BUJO (bullet journal) method: every entry is a
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date, timedelta
 
@@ -391,6 +392,50 @@ class Task(TimestampMixin, db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Task {self.uuid[:8]} {self.title[:30]!r} {self.status}>"
+
+
+class ClientOperation(TimestampMixin, db.Model):
+    """Ação já aplicada, identificada por uma chave vinda do cliente.
+
+    Existe por causa de uma instabilidade clássica de rede: o servidor processa
+    o pedido, mas a resposta se perde antes de chegar ao navegador. Sem um
+    registro, o reenvio criaria a tarefa duas vezes. Com ele, o reenvio devolve
+    exatamente a mesma resposta da primeira vez.
+
+    É uma tabela de passagem: as linhas são podadas depois de alguns dias (veja
+    :func:`app.offline.prune`) e não entram no backup, que guarda só o que o
+    usuário criou.
+    """
+
+    __tablename__ = "client_operations"
+    __table_args__ = (
+        # A rota faz parte da identidade: a mesma chave em rotas diferentes são
+        # ações diferentes (e o reenvio de uma não pode anular a outra).
+        UniqueConstraint("user_id", "key", "endpoint", name="uq_client_operations_user_key"),
+        Index("ix_client_operations_created", "created_at"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # Chave de idempotência gerada no navegador (UUID), única por usuário.
+    key = db.Column(db.String(80), nullable=False)
+    # Endpoint que aplicou a ação: a mesma chave em outra rota não é replay.
+    endpoint = db.Column(db.String(64), nullable=False)
+    status_code = db.Column(db.Integer, default=200, nullable=False)
+    response_json = db.Column(db.Text, nullable=True)
+
+    def payload(self) -> dict:
+        """Resposta gravada, pronta para ser devolvida de novo."""
+        if not self.response_json:
+            return {}
+        try:
+            data = json.loads(self.response_json)
+        except ValueError:  # pragma: no cover - só com banco adulterado
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ClientOperation {self.endpoint} {self.key[:8]}>"
 
 
 def local_tz():

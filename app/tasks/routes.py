@@ -15,7 +15,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from .. import markdown_notes
+from .. import markdown_notes, offline
 from ..extensions import db
 from ..models import Task
 from ..utils import (
@@ -136,6 +136,12 @@ def create():
         if kind in TASK_KINDS:
             form.kind.data = kind
 
+    # Um reenvio do modo offline (mesma chave) devolve a resposta da primeira vez.
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.create")
+    if stored is not None:
+        return stored
+
     if form.validate_on_submit():
         task = Task(user_id=current_user.id)
         _apply_form(task, form)
@@ -145,10 +151,18 @@ def create():
         else:
             task.status = STATUS_OPEN
         db.session.add(task)
-        db.session.commit()
+        db.session.flush()  # garante task.id para as URLs do payload
+        redirect_to = _next_url(task)
+        payload = {"ok": True, "task": _task_payload(task), "redirect": redirect_to}
+        offline.remember(key, "tasks.create", payload, 201)
+        offline.commit(key, "tasks.create")
+        if _wants_json():
+            return jsonify(payload), 201
         flash("Tarefa criada.", "success")
-        return redirect(_next_url(task))
+        return redirect(redirect_to)
 
+    if _wants_json():
+        return jsonify({"ok": False, "errors": form.errors}), 400
     return render_template("tasks/form.html", form=form, task=None)
 
 
@@ -156,6 +170,11 @@ def create():
 @login_required
 def quick_add():
     form = QuickTaskForm()
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.quick_add")
+    if stored is not None:
+        return stored
+
     if form.validate_on_submit():
         task = Task(
             user_id=current_user.id,
@@ -166,9 +185,12 @@ def quick_add():
             status=STATUS_OPEN,
         )
         db.session.add(task)
-        db.session.commit()
+        db.session.flush()
+        payload = {"ok": True, "task": _task_payload(task)}
+        offline.remember(key, "tasks.quick_add", payload, 201)
+        offline.commit(key, "tasks.quick_add")
         if _wants_json():
-            return jsonify({"ok": True, "task": _task_payload(task)}), 201
+            return jsonify(payload), 201
         flash("Tarefa adicionada.", "success")
         return redirect(request.form.get("next") or url_for("main.dashboard"))
 
@@ -183,8 +205,14 @@ def quick_add():
 @bp.route("/<int:task_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit(task_id: int):
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.edit")
+    if stored is not None:
+        return stored
+
     task = _get_task(task_id)
     form = TaskForm(obj=task)
+
     if form.validate_on_submit():
         _apply_form(task, form)
         requested = form.status.data or task.status
@@ -196,10 +224,18 @@ def edit(task_id: int):
             task.status = requested
             if requested != STATUS_DONE:
                 task.completed_at = None
-        db.session.commit()
+        db.session.flush()
+        redirect_to = _next_url(task)
+        payload = {"ok": True, "task": _task_payload(task), "redirect": redirect_to}
+        offline.remember(key, "tasks.edit", payload)
+        offline.commit(key, "tasks.edit")
+        if _wants_json():
+            return jsonify(payload)
         flash("Tarefa atualizada.", "success")
-        return redirect(_next_url(task))
+        return redirect(redirect_to)
 
+    if _wants_json():
+        return jsonify({"ok": False, "errors": form.errors}), 400
     return render_template("tasks/form.html", form=form, task=task)
 
 
@@ -233,14 +269,69 @@ def toggle(task_id: int):
     return redirect(request.form.get("next") or request.referrer or url_for("main.dashboard"))
 
 
+@bp.post("/<int:task_id>/status")
+@login_required
+def set_status(task_id: int):
+    """Define a situação da tarefa de forma **absoluta**.
+
+    O ``toggle`` inverte o que estiver no banco, então repetir o pedido desfaz a
+    ação — um clique duplo, ou um reenvio do modo offline, voltaria a tarefa
+    para "aberta". Aqui o cliente diz qual situação quer ("concluída"), o que
+    torna a operação idempotente: aplicar duas vezes dá no mesmo.
+    """
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.set_status")
+    if stored is not None:
+        return stored
+
+    task = _get_task(task_id)
+
+    payload_dados = request.get_json(silent=True) or {}
+    status = (request.form.get("status") or payload_dados.get("status") or "").strip()
+    destino = request.form.get("next") or request.referrer or url_for("main.dashboard")
+
+    if status not in {STATUS_OPEN, STATUS_DONE}:
+        if _wants_json():
+            return jsonify({"ok": False, "error": "Situação inválida."}), 400
+        flash("Situação inválida.", "danger")
+        return redirect(destino)
+
+    mudou = False
+    if status == STATUS_DONE and not task.is_done:
+        task.complete()
+        mudou = True
+    elif status == STATUS_OPEN and not task.is_open:
+        task.reopen()
+        mudou = True
+
+    db.session.flush()
+    payload = {"ok": True, "changed": mudou, "task": _task_payload(task)}
+    offline.remember(key, "tasks.set_status", payload)
+    offline.commit(key, "tasks.set_status")
+
+    if _wants_json():
+        return jsonify(payload)
+    flash("Tarefa concluída! ✕" if status == STATUS_DONE else "Tarefa reaberta.", "success" if mudou else "info")
+    return redirect(destino)
+
+
 @bp.post("/<int:task_id>/delete")
 @login_required
 def delete(task_id: int):
+    # O replay vem antes de buscar a tarefa: na segunda vez ela já não existe,
+    # e um 404 faria o cliente tratar como falha o que na verdade deu certo.
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.delete")
+    if stored is not None:
+        return stored
+
     task = _get_task(task_id)
     db.session.delete(task)
-    db.session.commit()
+    payload = {"ok": True, "deleted": task_id}
+    offline.remember(key, "tasks.delete", payload)
+    offline.commit(key, "tasks.delete")
     if _wants_json():
-        return jsonify({"ok": True, "deleted": task_id})
+        return jsonify(payload)
     flash("Tarefa removida.", "info")
     return redirect(request.form.get("next") or url_for("tasks.index"))
 
@@ -253,6 +344,11 @@ def migrate(task_id: int):
     Os atalhos são **relativos à data atual da tarefa** (nunca "hoje + 1"), para
     que adiar uma tarefa já agendada para amanhã não tente mirar o próprio dia.
     """
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.migrate")
+    if stored is not None:
+        return stored
+
     task = _get_task(task_id)
     base = task.scheduled_date or today_local()
     target = parse_date(request.form.get("target_date"))
@@ -292,9 +388,12 @@ def migrate(task_id: int):
         return redirect(destino)
 
     task.migrate_to(target)
-    db.session.commit()
+    db.session.flush()
+    payload = {"ok": True, "task": _task_payload(task)}
+    offline.remember(key, "tasks.migrate", payload)
+    offline.commit(key, "tasks.migrate")
     if _wants_json():
-        return jsonify({"ok": True, "task": _task_payload(task)})
+        return jsonify(payload)
     flash(f'Tarefa adiada para {target.strftime("%d/%m/%Y")}.', "info")
     return redirect(destino)
 
@@ -303,7 +402,13 @@ def migrate(task_id: int):
 @login_required
 def save_notes(task_id: int):
     """Grava as anotações da tarefa (usado pelo editor da tela de detalhe)."""
+    key = offline.idempotency_key()
+    stored = offline.replay(key, "tasks.save_notes")
+    if stored is not None:
+        return stored
+
     task = _get_task(task_id)
+
     # O botão "Limpar" manda clear_notes=1; o textarea continua sendo a fonte do texto.
     if request.form.get("clear_notes"):
         texto = ""
@@ -314,7 +419,9 @@ def save_notes(task_id: int):
         flash(f"As anotações passam de {limite} caracteres. Nada foi salvo.", "danger")
     else:
         task.notes = texto or None
-        db.session.commit()
+        db.session.flush()
+        offline.remember(key, "tasks.save_notes", {"ok": True})
+        offline.commit(key, "tasks.save_notes")
         flash("Anotações salvas." if texto else "Anotações removidas.", "success")
 
     if _wants_json():

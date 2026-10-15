@@ -16,6 +16,7 @@ calendário, diário no estilo **BUJO (bullet journal)**, backup e restauração
 - [Como rodar (Docker)](#como-rodar-docker)
 - [Primeiro acesso](#primeiro-acesso)
 - [As telas do app](#as-telas-do-app)
+- [Modo offline](#modo-offline)
 - [Backup e restauração](#backup-e-restauração)
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Consumo de recursos](#consumo-de-recursos)
@@ -47,6 +48,7 @@ calendário, diário no estilo **BUJO (bullet journal)**, backup e restauração
 | Backup e restauração | Exportar/importar JSON (baixar, colar ou enviar arquivo), snapshots no servidor com rotação e restauração nos modos *mesclar*/*substituir*, além de comandos de CLI |
 | Começa limpo para quem baixar | A imagem não leva banco, usuário nem tarefa: o primeiro boot cria um banco vazio e o cadastro fica aberto para você criar a sua conta |
 | Celular e desktop | Layout responsivo (testado de 360px a 1440px, sem rolagem horizontal), alvos de toque de ~44px, sem zoom involuntário no iOS, e **instalável na tela inicial** (manifest + ícone) |
+| Funciona sem rede | Service worker em `/sw.js` guarda o app inteiro (Bootstrap, ícones, calendário) e as telas visitadas. As escritas feitas offline entram numa fila no aparelho e são reenviadas quando a conexão volta — com chave de idempotência, para reenvio nenhum virar tarefa duplicada |
 | Acesso remoto | Pronto para **Tailscale**/proxy reverso: `TRUST_PROXY` respeita `X-Forwarded-Proto`, `TODONOW_BIND` publica só na interface do tailnet e `TRUSTED_HOSTS` limita os hosts aceitos |
 | Rodar com menos de 4 GB | 2 workers gthread, SQLite em WAL; limite padrão de **512 MB** no compose (na prática, ~90 MB ociosos) |
 
@@ -309,6 +311,89 @@ navegador:
 - **Android/Chrome:** menu ⋮ → *Adicionar à tela inicial* / *Instalar app*.
 - **iPhone/Safari:** botão *Compartilhar* → *Adicionar à Tela de Início*.
 
+---
+
+## Modo offline
+
+> **Antes de tudo: precisa de HTTPS (ou localhost).** O navegador só registra
+> service worker em *contexto seguro*. Acessando por `http://127.0.0.1:8081` ou
+> `http://localhost:8081` funciona; acessando por `http://100.x.y.z` (IP do
+> tailnet) ou `http://todonow.lan`, **não** — nesse caso o app abre normalmente,
+> mas sem modo offline. Use [Tailscale Serve](#opção-b--tailscale-serve-https-com-nome-e-certificado)
+> ou um proxy com TLS. Abrir como app instalado (tela inicial) também exige o
+> mesmo contexto seguro.
+
+O todonow continua utilizável quando a rede cai — e quando a rede *existe mas
+não responde*, que costuma doer mais. São problemas diferentes, resolvidos em
+camadas:
+
+| Situação | O que acontece |
+|---|---|
+| Sem conexão, abrindo uma tela já visitada | O service worker (`/sw.js`) entrega a última versão guardada daquela tela, com um aviso de que o conteúdo é do cache |
+| Sem conexão, abrindo uma tela **nunca** visitada | Aparece a página `/offline`, que explica o que está guardado e que nada foi perdido |
+| Rede lenta, ou que aceita a conexão e não responde | As páginas esperam no máximo 4 s pela rede e então mostram o que está guardado, em vez de travar a tela |
+| Marcando, criando, adiando, removendo ou anotando sem rede | A ação entra numa **fila no aparelho** (IndexedDB) e a linha ganha um selo de "guardado, ainda não enviado" |
+| A conexão volta | A fila é reenviada sozinha, em ordem, e as listas se atualizam com o que o servidor realmente gravou |
+| Aba fechada no meio da digitação | O formulário é guardado como **rascunho** e, ao voltar, o texto é restaurado (ou oferecido, se o envio já tinha saído) |
+| Clique duplo no círculo da tarefa | Nada muda duas vezes: a situação vai como valor **absoluto** ("concluída"), nunca como inversão |
+
+A barra fixa no rodapé mostra o estado (sem conexão, *N* alterações guardadas,
+enviando, falhou) e permite ver, descartar e reenviar item por item.
+
+### Por que não duplica
+
+É o ponto delicado de qualquer modo offline: o servidor grava, a resposta se
+perde no caminho, o navegador reenvia. Para isso cada ação carrega uma **chave
+de idempotência** (`X-Idempotency-Key`); o servidor guarda a resposta aplicada
+em `client_operations` e, se a mesma chave voltar, devolve exatamente a resposta
+da primeira vez em vez de executar de novo. O registro entra na **mesma
+transação** do efeito: ou os dois são gravados, ou nenhum.
+
+Essa tabela é de passagem: as linhas são podadas depois de 7 dias e ela **não
+entra no backup** (o backup guarda o que você criou, não o controle interno).
+
+As operações que *definem* um valor (situação, data, anotações) são naturalmente
+seguras de repetir; as que *criam* algo (adicionar tarefa) são as que dependem
+da chave.
+
+### Quem fica de fora, e por quê
+
+Entrar, sair, cadastro e backup/restauração **não** entram na fila: dependem do
+servidor na hora e, no caso da sessão, valeriam para outro login depois. Sem
+rede, essas telas mostram o aviso de "sem conexão". Formulários com arquivo
+também ficam de fora — arquivo não cabe numa fila de ações.
+
+### O que fica guardado no aparelho
+
+- **Assets do app** (`/static/**`): o pacote inteiro, para o calendário e o
+  editor de anotações funcionarem offline já na primeira queda de rede.
+- **Telas visitadas**: só as **autenticadas** e por usuário. Ao sair (ou quando
+  a sessão expira e o servidor devolve a tela de login), essas cópias são
+  apagadas na hora — nada de página de um usuário sobrar para outro no mesmo
+  aparelho.
+- **A fila de ações**: cada item guarda de qual conta ele é. Se outra pessoa
+  entrar no mesmo navegador, o item **não** é enviado como ela.
+
+Limpar os dados do site no navegador apaga as telas guardadas e a fila; o que já
+foi enviado ao servidor continua no servidor.
+
+### Detalhes de implementação
+
+- `/sw.js` é servido pela raiz (um worker em `/static/` só controlaria
+  `/static/`) e é um *template*: a lista de assets e a versão do cache saem do
+  conteúdo real de `app/static`. Mudou um CSS/JS, mudou a versão, e o navegador
+  troca o cache velho sozinho — sem ninguém precisar subir um número à mão.
+- Estratégias de cache: `stale-while-revalidate` para estáticos,
+  rede-primeiro-com-prazo para páginas e o último JSON bom do calendário como
+  reserva.
+- As regras que decidem o comportamento em caso de erro (espera crescente entre
+  tentativas, quando uma ação anula outra, sessão expirada x erro de conteúdo e
+  quando um rascunho pode voltar) ficam isoladas em
+  `app/static/js/offline-core.js` e são conferidas por um harness em Node —
+  veja [Testes](#testes).
+
+---
+
 ## As telas do app
 
 | Rota | O que faz |
@@ -323,6 +408,8 @@ navegador:
 | `/backup/` | Backup, restauração e snapshots |
 | `/auth/profile` | Perfil: nome, e-mail, tema, troca de senha e estatísticas |
 | `/auth/users` | Admin: criar, ativar/desativar, promover e excluir usuários |
+| `/offline` | Tela mostrada quando não há rede nem cópia guardada da página (não precisa de login) |
+| `/sw.js` | Service worker: cache do app, das telas visitadas e do feed do calendário |
 | `/healthz` | Health check em JSON (usado pelo Docker) |
 
 ### Como a migração funciona
@@ -547,7 +634,24 @@ make test
 A suíte cobre autenticação e isolamento entre usuários, CRUD e conclusão de
 tarefas, migração BUJO (sem duplicar), logs diário/mensal/futuro, feed e reagendamento do
 calendário, backup/restauração (mesclar, substituir, snapshots, tentativa de
-path traversal) e comandos de CLI.
+path traversal), comandos de CLI e **modo offline** (service worker servido da
+raiz, precache completo, chaves de idempotência, situação absoluta e os ganchos
+que o JavaScript procura no HTML).
+
+### O JavaScript também é testado
+
+A lógica que decide o comportamento offline — o que o service worker guarda, o
+que a fila faz com cada ação e quando um rascunho pode voltar — roda de verdade
+fora do navegador:
+
+```bash
+node tests/js/sw_harness.mjs <(curl -s http://127.0.0.1:8081/sw.js)   # cache do worker
+node tests/js/offline_harness.mjs app/static/js/offline-core.js       # regras da fila
+```
+
+O pytest chama os dois (`tests/test_js_offline.py`) e **pula** quando não há
+`node` na máquina — o projeto não tem `package.json` nem depende de npm: se o
+node existe, a lógica é conferida; se não existe, o resto da suíte segue igual.
 
 ---
 
@@ -563,15 +667,17 @@ todonow/
 │   ├── utils.py             # datas em pt-BR, símbolos BUJO, matriz do mês
 │   ├── filters.py           # filtros Jinja e variáveis globais dos templates
 │   ├── security.py          # admin_required, política de cadastro, redirect seguro
+│   ├── offline.py           # chaves de idempotência das ações reenviadas offline
+│   ├── pwa.py               # /sw.js, /offline e versão do cache (hash dos assets)
 │   ├── cli.py               # init-db, create-user, backup, restore, snapshots, seed-demo…
 │   ├── auth/                # login, registro, perfil, administração de usuários
-│   ├── tasks/               # CRUD, concluir, migrar (mover de dia), reagendar
+│   ├── tasks/               # CRUD, concluir, definir situação, migrar, reagendar
 │   ├── main/                # dashboard, daily/monthly/future log, calendário e feed JSON
 │   ├── backup/              # exportar, importar, snapshots (service.py + rotas)
-│   ├── templates/           # Jinja (base, macros BUJO, telas por blueprint)
+│   ├── templates/           # Jinja (base, macros BUJO, telas por blueprint, sw.js, offline)
 │   └── static/              # css/js próprios + Bootstrap, Icons e FullCalendar vendorizados
 ├── migrations/              # Alembic (flask db upgrade no start do container)
-├── tests/                   # pytest (86 testes)
+├── tests/                   # pytest + harnesses em Node (tests/js)
 ├── docker/entrypoint.sh     # migra + bootstrap do admin + gunicorn
 ├── Dockerfile               # imagem enxuta, usuário não-root, healthcheck
 ├── docker-compose.yml       # produção no homelab (limites de memória/CPU)
@@ -592,6 +698,12 @@ todonow/
 A coluna `collection` continua no banco (e no backup) por compatibilidade com
 instâncias antigas, mas não aparece mais na interface.
 
+**client_operations** — `id`, `user_id`, `key` (chave de idempotência enviada
+pelo navegador), `endpoint`, `status_code`, `response_json`, `created_at`.
+Único por `(user_id, key, endpoint)`. É o que impede o reenvio de uma ação
+offline de criar a tarefa duas vezes; as linhas são podadas após 7 dias e não
+entram no backup.
+
 ---
 
 ## Segurança
@@ -606,6 +718,11 @@ instâncias antigas, mas não aparece mais na interface.
 - Headers de segurança (`X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, CSP restritiva) e container rodando como usuário não-root
   com `no-new-privileges`.
+- No modo offline, o cache do service worker guarda só as telas **autenticadas**
+  e as apaga quando a sessão termina; a fila de ações é marcada com a conta de
+  origem e não é enviada por outro usuário no mesmo navegador. As chaves de
+  idempotência são únicas por usuário — o reenvio de um não pode anular a ação
+  do outro.
 - O app **não** tem HTTPS próprio: se for expor fora da LAN, coloque atrás de um
   proxy reverso (Caddy/Nginx/Traefik) e ative `SESSION_COOKIE_SECURE=true`.
 
@@ -650,6 +767,32 @@ usa `TODONOW_BIND` (Tailscale), o endereço passa a ser `http://SEU-BIND:9090`.
 **Calendário vazio**
 O feed carrega do mês atual para frente; confira os filtros (situação/tipo) e se
 as tarefas têm data dentro do período exibido.
+
+**O app não abre sem internet (nem mostra a barra de "sem conexão")**
+Quase sempre é o contexto seguro: o navegador só registra service worker em
+**HTTPS ou localhost**. Confirme na barra de endereço:
+
+- `http://127.0.0.1:8081` ou `http://localhost:8081` → funciona.
+- `http://100.x.y.z`, `http://192.168.x.x`, `http://todonow.lan` → **não
+  funciona**; use Tailscale Serve (HTTPS) ou um proxy com TLS.
+
+Para conferir no navegador: DevTools → *Application* → *Service Workers* deve
+mostrar `/sw.js` como *activated*. Em *Cache Storage* aparecem
+`todonow-shell-…`, `todonow-pages-…` e `todonow-data-…`.
+
+**A barra diz que há alterações guardadas, mas elas não saem**
+1. Se a mensagem fala em sessão expirada, entre de novo: a fila continua no
+   aparelho e sai depois do login (é a mesma conta que a criou).
+2. Se o servidor recusou a alteração (ex.: a tarefa foi removida em outro
+   aparelho), o item fica marcado em vermelho — dá para ver o motivo, descartar
+   ou tentar de novo na própria barra.
+3. Se outra pessoa entrou no mesmo navegador, os itens da conta anterior ficam
+   parados de propósito, para não virarem tarefas na conta errada.
+
+**Depois de atualizar a imagem, o app continua com o CSS/JS antigo**
+O service worker troca o cache sozinho quando os assets mudam, mas a troca
+acontece depois que a página fecha. Recarregue uma vez com Ctrl+Shift+R
+(ou *DevTools → Application → Service Workers → Update*) para forçar.
 
 **Quero inspecionar o banco**
 

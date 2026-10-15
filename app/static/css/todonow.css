@@ -549,3 +549,112 @@ hr + .task-notes { margin-top: .5rem; }
 
   .upcoming-date { width: 2.4rem; }
 }
+
+/* ==========================================================================
+   Modo offline — barra de estado, pendências e rascunhos
+   ========================================================================== */
+
+/* A barra é fixa no rodapé; sem este espaço ela cobriria o fim da página. */
+body.bujo-body.has-offline-bar { padding-bottom: 5rem; }
+
+.offline-bar {
+  position: fixed;
+  z-index: 1035; /* acima do conteúdo, abaixo dos modais do Bootstrap (1055) */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: .5rem max(.75rem, env(safe-area-inset-left)) calc(.5rem + env(safe-area-inset-bottom));
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-warning-text-emphasis);
+  border-top: 1px solid var(--bs-warning-border-subtle);
+  box-shadow: 0 -6px 20px -14px rgba(16, 24, 40, .5);
+  font-size: .9rem;
+}
+
+.offline-bar.is-problema {
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  border-top-color: var(--bs-danger-border-subtle);
+}
+
+.offline-bar.is-ok {
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+  border-top-color: var(--bs-success-border-subtle);
+}
+
+.offline-bar-linha {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.offline-icone {
+  flex: 0 0 auto;
+  width: .7rem;
+  height: .7rem;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .75;
+  /* Pulso discreto: sinaliza "em andamento" sem chamar mais atenção que o
+     conteúdo. Desligado para quem pediu menos movimento. */
+  animation: offline-pulso 2s ease-in-out infinite;
+}
+
+.offline-bar.is-ok .offline-icone,
+.offline-bar.is-problema .offline-icone { animation: none; }
+
+@keyframes offline-pulso {
+  0%, 100% { opacity: .35; }
+  50% { opacity: .95; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offline-icone { animation: none; }
+}
+
+.offline-texto { flex: 1 1 auto; min-width: 0; }
+
+.offline-lista {
+  max-width: 1140px;
+  margin: .5rem auto 0;
+  padding: 0;
+  list-style: none;
+  max-height: 11rem;
+  overflow-y: auto;
+}
+
+.offline-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .4rem;
+  padding: .3rem 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.offline-item-texto { flex: 1 1 12rem; min-width: 0; }
+.offline-item-hora { opacity: .7; font-variant-numeric: tabular-nums; }
+.offline-item-erro { flex: 1 1 100%; font-size: .82rem; opacity: .85; }
+.offline-item.is-problema .offline-item-texto { text-decoration: line-through solid; }
+
+/* Linha cuja alteração ainda não foi confirmada pelo servidor. */
+.task-row.is-pending-sync {
+  border-style: dashed;
+  border-color: var(--bs-warning-border-subtle);
+}
+
+.task-row.is-pending-remove { opacity: .55; }
+.task-row.is-pending-remove .task-title { text-decoration: line-through; }
+
+.pending-flag {
+  display: inline-flex;
+  align-items: center;
+  color: var(--bs-warning-text-emphasis);
+  margin-left: .35rem;
+  font-size: .9rem;
+}
+
+.rascunho-aviso { margin-bottom: .75rem; }

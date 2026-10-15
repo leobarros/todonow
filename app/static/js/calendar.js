@@ -14,9 +14,14 @@
   var VIEW_KEY = 'todonow-cal-view';
 
   function showError(message) {
+    showMessage(message, 'danger');
+  }
+
+  function showMessage(message, tom) {
     if (!errorBox) return;
     errorBox.textContent = message;
-    errorBox.classList.remove('d-none');
+    errorBox.classList.remove('d-none', 'alert-danger', 'alert-warning', 'alert-info');
+    errorBox.classList.add('alert-' + tom);
   }
 
   function hideError() {
@@ -38,10 +43,15 @@
     })
       .then(function (response) {
         if (!response.ok) throw new Error('HTTP ' + response.status);
+        // O service worker marca assim quando o JSON veio do cache local.
+        if (response.headers.get('X-Todonow-Offline') === '1') {
+          showMessage('Sem conexão: mostrando as tarefas do último acesso.', 'warning');
+        } else {
+          hideError();
+        }
         return response.json();
       })
       .then(function (data) {
-        hideError();
         success(data);
       })
       .catch(function (error) {
@@ -92,23 +102,49 @@
     },
     eventDrop: function (info) {
       var date = info.event.startStr.slice(0, 10);
-      fetch(moveUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': CSRF,
-          Accept: 'application/json'
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ id: info.event.extendedProps.taskId || info.event.id, date: date })
-      })
-        .then(function (response) {
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          return response.json();
-        })
-        .then(function (data) {
-          if (!data.ok) throw new Error(data.error || 'erro desconhecido');
-          hideError();
+      var taskId = info.event.extendedProps.taskId || info.event.id;
+      var mover = function (url, corpo, rotulo) {
+        // Sem rede o arrasto continua valendo: a data vai absoluta (12/03) e a
+        // ação entra na fila, em vez de o cartão voltar sozinho para o lugar.
+        if (!window.TodonowOffline) {
+          return fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': CSRF,
+              Accept: 'application/json'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(corpo)
+          }).then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+          });
+        }
+        return window.TodonowOffline.enviarOuEnfileirarJson(url, corpo, {
+          kind: 'reschedule',
+          taskId: taskId,
+          label: rotulo
+        });
+      };
+
+      mover(moveUrl, { id: taskId, date: date }, 'Mover para ' + date + ': ' + info.event.title)
+        .then(function (resultado) {
+          if (resultado.estado === 'invalido') {
+            info.revert();
+            showError('Não foi possível reagendar: ' + ((resultado.dados && resultado.dados.error) || 'recusado'));
+            return;
+          }
+          if (resultado.dados && resultado.dados.ok === false) {
+            info.revert();
+            showError('Não foi possível reagendar: ' + (resultado.dados.error || 'erro desconhecido'));
+            return;
+          }
+          if (resultado.estado === 'na-fila') {
+            showMessage('Sem conexão: o novo dia foi guardado e será enviado quando a rede voltar.', 'warning');
+          } else {
+            hideError();
+          }
         })
         .catch(function (error) {
           info.revert();
@@ -126,6 +162,12 @@
   });
 
   calendar.render();
+
+  /* A fila do modo offline avisa quando terminou de enviar: aí o calendário
+     recarrega para mostrar o que o servidor realmente gravou. */
+  document.addEventListener('todonow:refresh', function () {
+    calendar.refetchEvents();
+  });
 
   /* ---- filters ---- */
   document.querySelectorAll('[data-cal-filter]').forEach(function (button) {

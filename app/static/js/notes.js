@@ -470,6 +470,15 @@
         var markdown = htmlParaMarkdown(visual.innerHTML);
         if (markdown !== null) textarea.value = markdown;
       });
+
+      /* O rascunho automático (js/offline.js) pergunta antes de guardar: no
+         modo visual, o textarea ainda não tem o texto — quem tem é o editor.
+         Sem isso, fechar a aba no modo visual perderia o que foi escrito. */
+      formulario.addEventListener('todonow:collect', function () {
+        if (modo !== 'visual') return;
+        var markdown = htmlParaMarkdown(visual.innerHTML);
+        if (markdown !== null) textarea.value = markdown;
+      });
     }
 
     /* Começa no visual: é o modo de quem não escreve Markdown. */
