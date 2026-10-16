@@ -551,16 +551,22 @@
   });
 
   /* ------------------------------------------------------------------
-   * Auto-submit filter switches on the task list
+   * Filtros que aplicam na hora: switch e <select> enviam o formulário no
+   * change (o campo de busca continua no botão Filtrar, que também é o
+   * caminho de quem está sem JavaScript). Opt-in pela marcação:
+   *   <form data-auto-submit>
    * ------------------------------------------------------------------ */
-  var filterForm = document.getElementById('task-filters');
-  if (filterForm) {
-    filterForm.querySelectorAll('select, input[type="checkbox"]').forEach(function (input) {
-      input.addEventListener('change', function () {
-        filterForm.submit();
+  document.querySelectorAll('form[data-auto-submit]').forEach(function (form) {
+    form.querySelectorAll('select, input[type="checkbox"]').forEach(function (campo) {
+      campo.addEventListener('change', function () {
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+        } else {
+          form.submit();
+        }
       });
     });
-  }
+  });
 
   /* O modo offline (js/offline.js) precisa destas duas para reconciliar a tela
      depois de enviar a fila: a região viva traz o estado real do servidor. */

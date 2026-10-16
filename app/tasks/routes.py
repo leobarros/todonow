@@ -65,7 +65,10 @@ def index():
     kind = (request.args.get("kind") or "").strip()
     term = (request.args.get("q") or "").strip()
     when = (request.args.get("when") or "all").strip()
-    include_done = request.args.get("include_done", "1") not in {"0", "false", "no"}
+    # O formulário manda um oculto "0" e, quando ligado, o checkbox "1" — vale o
+    # último. Sem parâmetro nenhum (link direto, menu), mostra tudo.
+    marcados = request.args.getlist("include_done")
+    include_done = marcados[-1] not in {"0", "false", "no"} if marcados else True
 
     if status in TASK_STATUSES:
         query = query.filter(Task.status == status)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import pytest
+
 from app.extensions import db
 from app.models import Task
 
@@ -415,3 +417,61 @@ def test_cli_dedupe_across_days_keeps_legit_repeats(app, runner, user):
     plano = runner.invoke(args=["dedupe-tasks", "--across-days"])
     assert "Nenhuma duplicata" in plano.output
     assert Task.for_user(user).count() == 3
+
+
+class TestFiltroConcluidas:
+    """O switch "Incluir concluídas" precisa funcionar nos dois sentidos.
+
+    Regressão: o checkbox desmarcado não enviava parâmetro nenhum e o servidor
+    caía no padrão "incluir" — desligar o switch não filtrava nada (a lista
+    voltava igual e o switch reaparecia ligado).
+    """
+
+    @pytest.fixture()
+    def com_concluida(self, app, user):
+        from datetime import date
+
+        from app.extensions import db
+        from app.models import Task
+
+        aberta = Task(user_id=user.id, title="Aberta", scheduled_date=date.today())
+        feita = Task(user_id=user.id, title="Feita", scheduled_date=date.today(), status="done")
+        db.session.add_all([aberta, feita])
+        db.session.commit()
+        return aberta, feita
+
+    def test_sem_parametro_mostra_tudo(self, auth_client, com_concluida):
+        body = auth_client.get("/tasks/").data.decode("utf-8")
+        assert "Aberta" in body
+        assert "Feita" in body
+
+    def test_include_done_desligado_esconde_concluidas(self, auth_client, com_concluida):
+        body = auth_client.get("/tasks/?include_done=0").data.decode("utf-8")
+        assert "Aberta" in body
+        assert ">Feita<" not in body
+
+    def test_include_done_ligado_mostra_concluidas(self, auth_client, com_concluida):
+        body = auth_client.get("/tasks/?include_done=1").data.decode("utf-8")
+        assert "Feita" in body
+
+    def test_oculto_zero_vem_antes_do_checkbox_e_vale_o_ultimo(self, auth_client, com_concluida):
+        """O formulário manda 0 (oculto) e, ligado, 1 (checkbox): vale o último."""
+        # como o navegador envia quando o switch está ligado
+        body = auth_client.get("/tasks/?include_done=0&include_done=1").data.decode("utf-8")
+        assert "Feita" in body
+
+    def test_switch_reflete_o_estado_do_filtro(self, auth_client, com_concluida):
+        """O switch desenhado bate com o filtro que o servidor aplicou."""
+
+        def switch_ligado(html: str) -> bool:
+            return "checked" in html.split('id="f-done"', 1)[1][:120]
+
+        assert switch_ligado(auth_client.get("/tasks/?include_done=1").data.decode("utf-8")) is True
+        assert switch_ligado(auth_client.get("/tasks/?include_done=0").data.decode("utf-8")) is False
+        # sem parâmetro nenhum o padrão é mostrar tudo (switch ligado)
+        assert switch_ligado(auth_client.get("/tasks/").data.decode("utf-8")) is True
+
+    def test_formulario_tem_oculto_e_aplica_na_hora(self, auth_client, com_concluida):
+        body = auth_client.get("/tasks/").data.decode("utf-8")
+        assert 'data-auto-submit' in body
+        assert '<input type="hidden" name="include_done" value="0">' in body
